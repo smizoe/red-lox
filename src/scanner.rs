@@ -70,6 +70,24 @@ pub enum Token {
     Eof,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Location {
+    line_no: usize,
+    char_no: usize,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TokenWithLocation {
+    token: Token,
+    location: Location,
+}
+
+impl TokenWithLocation {
+    fn new(token: Token, location: Location) -> Self {
+        Self { token, location }
+    }
+}
+
 pub struct Scanner<'a> {
     text: &'a str,
     start: usize,
@@ -81,7 +99,7 @@ pub struct Scanner<'a> {
 #[derive(Debug, Default)]
 pub struct ScanResult {
     pub errors: Vec<anyhow::Error>,
-    pub tokens: Vec<Token>,
+    pub tokens: Vec<TokenWithLocation>,
 }
 
 impl<'a> Scanner<'a> {
@@ -103,14 +121,24 @@ impl<'a> Scanner<'a> {
                 Err(e) => result.errors.push(e),
             }
         }
-        result.tokens.push(Token::Eof);
+        result.tokens.push(TokenWithLocation::new(
+            Token::Eof,
+            Location {
+                line_no: self.line_no,
+                char_no: self.char_no,
+            },
+        ));
         result
     }
 
-    fn scan_token(&mut self) -> anyhow::Result<Token> {
+    fn scan_token(&mut self) -> anyhow::Result<TokenWithLocation> {
         use Token::*;
 
         self.junk();
+        let original_location = Location {
+            line_no: self.line_no,
+            char_no: self.char_no,
+        };
 
         let token = match self.advance() {
             b'(' => Ok(LeftParen),
@@ -136,13 +164,13 @@ impl<'a> Scanner<'a> {
                 Greater
             }),
             b'/' => Ok(Slash),
-            b'"' => self.string(),
+            b'"' => self.string(&original_location),
             b'0'..=b'9' => Ok(self.number()),
             b'A'..=b'Z' | b'a'..=b'z' | b'_' => Ok(self.identifier()),
-            _ => Err(self.report_unexpected_char()),
+            _ => Err(self.report_unexpected_char(&original_location)),
         };
 
-        token
+        token.map(move |t| TokenWithLocation::new(t, original_location))
     }
 
     fn junk(&mut self) {
@@ -206,7 +234,7 @@ impl<'a> Scanner<'a> {
         value
     }
 
-    fn string(&mut self) -> anyhow::Result<Token> {
+    fn string(&mut self, original_location: &Location) -> anyhow::Result<Token> {
         while self.peek() != b'"' && !self.is_at_end() {
             let b = self.advance();
             if b == b'\n' {
@@ -273,29 +301,30 @@ impl<'a> Scanner<'a> {
         )
     }
 
-    fn report_unexpected_char(&self) -> anyhow::Error {
+    fn report_unexpected_char(&self, original_location: &Location) -> anyhow::Error {
         anyhow!(
             "Error: unexpected character {} at char {} in line {}",
-            self.text.as_bytes()[self.current],
-            // since char_no is in sync with `current`, char_no is past the unexpected char.
-            self.char_no - 1,
-            self.line_no
+            self.text.as_bytes()[self.start],
+            original_location.char_no,
+            original_location.line_no
         )
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::scanner;
-
     use super::*;
+
+    fn get_tokens(result: &ScanResult) -> Vec<Token> {
+        result.tokens.iter().map(|t| t.token.clone()).collect()
+    }
 
     #[test]
     fn scanner_adds_eof_token() {
         let mut scanner = Scanner::new("");
         let result = scanner.scan_tokens();
         assert!(result.errors.is_empty());
-        assert_eq!(result.tokens, vec![Token::Eof]);
+        assert_eq!(get_tokens(&result), vec![Token::Eof]);
     }
 
     #[test]
@@ -305,10 +334,151 @@ mod tests {
         let result = scanner.scan_tokens();
         assert!(result.errors.is_empty());
         assert_eq!(
-            result.tokens,
+            get_tokens(&result),
             vec![
                 LeftParen, RightParen, LeftBrace, RightBrace, Comma, Dot, Minus, Plus, Semicolon,
                 Star, Eof
+            ]
+        );
+    }
+
+    #[test]
+    fn scanner_tokenizes_tokens_with_a_one_char_look_ahead() {
+        use Token::*;
+        let mut scanner = Scanner::new(
+            "=!<> // foo bar comment
+        /<=>===!=",
+        );
+        let result = scanner.scan_tokens();
+        assert!(result.errors.is_empty());
+        assert_eq!(
+            get_tokens(&result),
+            vec![
+                Equal,
+                Bang,
+                Less,
+                Greater,
+                Slash,
+                LessEqual,
+                GreaterEqual,
+                EqualEqual,
+                BangEqual,
+                Eof
+            ]
+        );
+    }
+
+    #[test]
+    fn scanner_tokenizes_numbers_and_strings() {
+        use Token::*;
+        let mut scanner = Scanner::new(
+            " 1. \"\" 1.234 \"foo\" \"test
+ case\"",
+        );
+        let result = scanner.scan_tokens();
+        assert!(result.errors.is_empty());
+        assert_eq!(
+            get_tokens(&result),
+            vec![
+                Number(1.0),
+                Dot,
+                String("".to_string()),
+                Number(1.234),
+                String("foo".to_string()),
+                String("test\n case".to_string()),
+                Eof
+            ]
+        );
+    }
+
+    #[test]
+    fn scanner_tokenizes_reserved_words() {
+        use Token::*;
+        let mut scanner = Scanner::new(
+            "and class else false for fun if nil
+            or print return super this true var while",
+        );
+        let result = scanner.scan_tokens();
+        assert!(result.errors.is_empty());
+        assert_eq!(
+            get_tokens(&result),
+            vec![
+                And, Class, Else, False, For, Fun, If, Nil, Or, Print, Return, Super, This, True,
+                Var, While, Eof
+            ]
+        );
+    }
+
+    #[test]
+    fn scanner_tokenizes_identifiers() {
+        use Token::*;
+        let mut scanner = Scanner::new(" x y a1b2c3_d4");
+        let result = scanner.scan_tokens();
+        assert!(result.errors.is_empty());
+        assert_eq!(
+            get_tokens(&result),
+            vec![
+                Identifier("x".to_string()),
+                Identifier("y".to_string()),
+                Identifier("a1b2c3_d4".to_string()),
+                Eof
+            ]
+        );
+    }
+
+    #[test]
+    fn scanner_returns_token_with_location_information() {
+        let mut scanner = Scanner::new(
+            " x  y and
+  z \" foo bar\"",
+        );
+        let result = scanner.scan_tokens();
+        assert!(result.errors.is_empty());
+        assert_eq!(
+            result.tokens,
+            vec![
+                TokenWithLocation::new(
+                    Token::Identifier("x".to_string()),
+                    Location {
+                        line_no: 1,
+                        char_no: 2
+                    }
+                ),
+                TokenWithLocation::new(
+                    Token::Identifier("y".to_string()),
+                    Location {
+                        line_no: 1,
+                        char_no: 5
+                    }
+                ),
+                TokenWithLocation::new(
+                    Token::And,
+                    Location {
+                        line_no: 1,
+                        char_no: 7
+                    }
+                ),
+                TokenWithLocation::new(
+                    Token::Identifier("z".to_string()),
+                    Location {
+                        line_no: 2,
+                        char_no: 3
+                    }
+                ),
+                TokenWithLocation::new(
+                    Token::String(" foo bar".to_string()),
+                    Location {
+                        line_no: 2,
+                        char_no: 5
+                    }
+                ),
+                TokenWithLocation::new(
+                    Token::Eof,
+                    Location {
+                        line_no: 2,
+                        char_no: 15
+                    }
+                )
             ]
         );
     }

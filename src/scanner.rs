@@ -21,7 +21,7 @@ const KEYWORDS: phf::Map<&'static [u8], Token> = phf_map! {
     b"while" => Token::While,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Token {
     // Single-character tokens.
     LeftParen,
@@ -70,13 +70,6 @@ pub enum Token {
     Eof,
 }
 
-#[derive(Debug, Clone)]
-pub struct TokenInfo {
-    token: Token,
-    line_no: usize,
-    char_no: usize,
-}
-
 pub struct Scanner<'a> {
     text: &'a str,
     start: usize,
@@ -87,8 +80,8 @@ pub struct Scanner<'a> {
 
 #[derive(Debug, Default)]
 pub struct ScanResult {
-    errors: Vec<anyhow::Error>,
-    tokens: Vec<TokenInfo>,
+    pub errors: Vec<anyhow::Error>,
+    pub tokens: Vec<Token>,
 }
 
 impl<'a> Scanner<'a> {
@@ -105,22 +98,19 @@ impl<'a> Scanner<'a> {
     pub fn scan_tokens(&mut self) -> ScanResult {
         let mut result = ScanResult::default();
         while !self.is_at_end() {
-            self.start = self.current;
             match self.scan_token() {
                 Ok(tok) => result.tokens.push(tok),
                 Err(e) => result.errors.push(e),
             }
         }
+        result.tokens.push(Token::Eof);
         result
     }
 
-    fn scan_token(&mut self) -> anyhow::Result<TokenInfo> {
+    fn scan_token(&mut self) -> anyhow::Result<Token> {
         use Token::*;
 
         self.junk();
-        if self.is_at_end() {
-            return Ok(self.generate_token_info(Eof));
-        }
 
         let token = match self.advance() {
             b'(' => Ok(LeftParen),
@@ -152,7 +142,7 @@ impl<'a> Scanner<'a> {
             _ => Err(self.report_unexpected_char()),
         };
 
-        token.map(|t| self.generate_token_info(t))
+        token
     }
 
     fn junk(&mut self) {
@@ -176,14 +166,7 @@ impl<'a> Scanner<'a> {
                 _ => break,
             }
         }
-    }
-
-    fn generate_token_info(&self, token: Token) -> TokenInfo {
-        TokenInfo {
-            token,
-            line_no: self.line_no,
-            char_no: self.char_no,
-        }
+        self.start = self.current;
     }
 
     fn is_at_end(&self) -> bool {
@@ -298,5 +281,35 @@ impl<'a> Scanner<'a> {
             self.char_no - 1,
             self.line_no
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::scanner;
+
+    use super::*;
+
+    #[test]
+    fn scanner_adds_eof_token() {
+        let mut scanner = Scanner::new("");
+        let result = scanner.scan_tokens();
+        assert!(result.errors.is_empty());
+        assert_eq!(result.tokens, vec![Token::Eof]);
+    }
+
+    #[test]
+    fn scanner_tokenizes_single_char_tokens_corrcetly() {
+        use Token::*;
+        let mut scanner = Scanner::new("(){},.-+;*");
+        let result = scanner.scan_tokens();
+        assert!(result.errors.is_empty());
+        assert_eq!(
+            result.tokens,
+            vec![
+                LeftParen, RightParen, LeftBrace, RightBrace, Comma, Dot, Minus, Plus, Semicolon,
+                Star, Eof
+            ]
+        );
     }
 }

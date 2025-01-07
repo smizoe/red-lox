@@ -1,6 +1,10 @@
-use anyhow::anyhow;
+use core::fmt;
 use phf::phf_map;
-use std::str::FromStr;
+use std::{
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
+use thiserror::Error;
 
 const KEYWORDS: phf::Map<&'static [u8], Token> = phf_map! {
     b"and" => Token::And,
@@ -72,8 +76,14 @@ pub enum Token {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Location {
-    line_no: usize,
-    char_no: usize,
+    line: usize,
+    column: usize,
+}
+
+impl Display for Location {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "at column {} in line {}", self.column, self.line)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -98,8 +108,16 @@ pub struct Scanner<'a> {
 
 #[derive(Debug, Default)]
 pub struct ScanResult {
-    pub errors: Vec<anyhow::Error>,
+    pub errors: Vec<TokenizationError>,
     pub tokens: Vec<TokenWithLocation>,
+}
+
+#[derive(Error, Debug)]
+pub enum TokenizationError {
+    #[error("Error: unexpected character {character} {location}")]
+    UnexpectedCharacterError { character: u8, location: Location },
+    #[error("Error: unexpected EOF while tokenizing string {location}")]
+    UnexpectedEofInStringError { location: Location },
 }
 
 impl<'a> Scanner<'a> {
@@ -124,20 +142,20 @@ impl<'a> Scanner<'a> {
         result.tokens.push(TokenWithLocation::new(
             Token::Eof,
             Location {
-                line_no: self.line_no,
-                char_no: self.char_no,
+                line: self.line_no,
+                column: self.char_no,
             },
         ));
         result
     }
 
-    fn scan_token(&mut self) -> anyhow::Result<TokenWithLocation> {
+    fn scan_token(&mut self) -> Result<TokenWithLocation, TokenizationError> {
         use Token::*;
 
         self.junk();
         let original_location = Location {
-            line_no: self.line_no,
-            char_no: self.char_no,
+            line: self.line_no,
+            column: self.char_no,
         };
 
         let token = match self.advance() {
@@ -234,7 +252,7 @@ impl<'a> Scanner<'a> {
         value
     }
 
-    fn string(&mut self, original_location: &Location) -> anyhow::Result<Token> {
+    fn string(&mut self, original_location: &Location) -> Result<Token, TokenizationError> {
         while self.peek() != b'"' && !self.is_at_end() {
             let b = self.advance();
             if b == b'\n' {
@@ -244,7 +262,7 @@ impl<'a> Scanner<'a> {
         }
 
         if self.is_at_end() {
-            return Err(self.report_eof_while_string());
+            return Err(self.report_eof_while_string(original_location));
         }
 
         // consumes the matching '"'
@@ -293,21 +311,17 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn report_eof_while_string(&self) -> anyhow::Error {
-        anyhow!(
-            "Error: unexpected EOF while tokenizing string at around char {} in line {}",
-            self.char_no - 1,
-            self.line_no
-        )
+    fn report_eof_while_string(&self, original_location: &Location) -> TokenizationError {
+        TokenizationError::UnexpectedEofInStringError {
+            location: original_location.clone(),
+        }
     }
 
-    fn report_unexpected_char(&self, original_location: &Location) -> anyhow::Error {
-        anyhow!(
-            "Error: unexpected character {} at char {} in line {}",
-            self.text.as_bytes()[self.start],
-            original_location.char_no,
-            original_location.line_no
-        )
+    fn report_unexpected_char(&self, original_location: &Location) -> TokenizationError {
+        TokenizationError::UnexpectedCharacterError {
+            character: self.text.as_bytes()[self.start],
+            location: original_location.clone(),
+        }
     }
 }
 
@@ -439,44 +453,26 @@ mod tests {
             vec![
                 TokenWithLocation::new(
                     Token::Identifier("x".to_string()),
-                    Location {
-                        line_no: 1,
-                        char_no: 2
-                    }
+                    Location { line: 1, column: 2 }
                 ),
                 TokenWithLocation::new(
                     Token::Identifier("y".to_string()),
-                    Location {
-                        line_no: 1,
-                        char_no: 5
-                    }
+                    Location { line: 1, column: 5 }
                 ),
-                TokenWithLocation::new(
-                    Token::And,
-                    Location {
-                        line_no: 1,
-                        char_no: 7
-                    }
-                ),
+                TokenWithLocation::new(Token::And, Location { line: 1, column: 7 }),
                 TokenWithLocation::new(
                     Token::Identifier("z".to_string()),
-                    Location {
-                        line_no: 2,
-                        char_no: 3
-                    }
+                    Location { line: 2, column: 3 }
                 ),
                 TokenWithLocation::new(
                     Token::String(" foo bar".to_string()),
-                    Location {
-                        line_no: 2,
-                        char_no: 5
-                    }
+                    Location { line: 2, column: 5 }
                 ),
                 TokenWithLocation::new(
                     Token::Eof,
                     Location {
-                        line_no: 2,
-                        char_no: 15
+                        line: 2,
+                        column: 15
                     }
                 )
             ]

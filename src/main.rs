@@ -59,6 +59,9 @@ mod internal {
         for token in result.tokens.iter() {
             println!("{:?}", token);
         }
+        for e in result.errors.iter() {
+            println!("{:?}", e);
+        }
         Ok(())
     }
 }

@@ -1,14 +1,10 @@
 [package]
-name = "red-lox"
+name = "red-lox-ast"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0"
-red-lox-ast = {path = "red-lox-ast"}
-
-[workspace]
-members = ["red-lox-ast"]
-
+phf = { version="0.11", features = ["macros"] }
+thiserror = "2.0.9"

@@ -1,7 +1,5 @@
 use std::{env, path::Path, process::ExitCode};
 
-mod scanner;
-
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     if args.len() > 1 {
@@ -28,7 +26,7 @@ mod internal {
         path::Path,
     };
 
-    use crate::scanner::Scanner;
+    use red_lox_ast::Scanner;
 
     pub fn run_file(file_path: &Path) -> anyhow::Result<()> {
         let mut file = File::open(file_path)?;
@@ -43,12 +41,12 @@ mod internal {
             print!("> ");
             stdout().flush()?;
             line.clear();
-            let _ = stdin().read_line(&mut line)?;
-            let cmd = line.trim_end();
-            if cmd.len() == 1 && cmd.as_bytes()[0] == 4 { // Ctrl-d
+            let read = stdin().read_line(&mut line)?;
+            if read == 0 {
+                // Ctrl-d
                 break;
             }
-            let _ = run(cmd);
+            let _ = run(&line);
         }
         Ok(())
     }

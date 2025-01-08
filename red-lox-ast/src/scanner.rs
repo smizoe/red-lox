@@ -133,11 +133,13 @@ impl<'a> Scanner<'a> {
 
     pub fn scan_tokens(&mut self) -> ScanResult {
         let mut result = ScanResult::default();
+        self.junk();
         while !self.is_at_end() {
             match self.scan_token() {
                 Ok(tok) => result.tokens.push(tok),
                 Err(e) => result.errors.push(e),
             }
+        self.junk();
         }
         result.tokens.push(TokenWithLocation::new(
             Token::Eof,
@@ -152,7 +154,6 @@ impl<'a> Scanner<'a> {
     fn scan_token(&mut self) -> Result<TokenWithLocation, TokenizationError> {
         use Token::*;
 
-        self.junk();
         let original_location = Location {
             line: self.line_no,
             column: self.char_no,
@@ -336,6 +337,14 @@ mod tests {
     #[test]
     fn scanner_adds_eof_token() {
         let mut scanner = Scanner::new("");
+        let result = scanner.scan_tokens();
+        assert!(result.errors.is_empty());
+        assert_eq!(get_tokens(&result), vec![Token::Eof]);
+    }
+
+    #[test]
+    fn scanner_handles_spaces() {
+        let mut scanner = Scanner::new(" \r\n ");
         let result = scanner.scan_tokens();
         assert!(result.errors.is_empty());
         assert_eq!(get_tokens(&result), vec![Token::Eof]);

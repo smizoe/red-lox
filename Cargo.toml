@@ -13,5 +13,4 @@ members = ["red-lox-ast", "red-lox-parser"]
 
 [workspace.dependencies]
 red-lox-ast = {path = "red-lox-ast"}
-red-lox-parser = {path = "red-lox-parser"}
 thiserror = "2.0.9"

@@ -5,7 +5,7 @@ use crate::{
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-#[error("ParseError: {msg} at column {.location.column} in line {.location.line} ")]
+#[error("ParseError: {msg} at column {} in line {}", .location.column, .location.line)]
 pub struct ParseError {
     msg: String,
     location: Location,
@@ -92,11 +92,11 @@ impl Parser {
                 }
             }
             Eof => Err(ParseError {
-                msg: String::from_str("Eof reached while parsing an expression"),
+                msg: "Eof reached while parsing an expression".to_string(),
                 location: token.location,
             }),
             _ => Err(ParseError {
-                msg: format!("Unexpected token {:} found", token),
+                msg: format!("Unexpected token {:?} found", token.token),
                 location: token.location,
             }),
         };

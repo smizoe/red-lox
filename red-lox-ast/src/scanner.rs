@@ -76,8 +76,8 @@ pub enum Token {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Location {
-    line: usize,
-    column: usize,
+    pub line: usize,
+    pub column: usize,
 }
 
 impl Display for Location {

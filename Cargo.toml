@@ -9,7 +9,7 @@ edition = "2021"
 anyhow = "1.0"
 
 [workspace]
-members = ["red-lox-ast", "red-lox-parser"]
+members = ["red-lox-ast", "red-lox-interpreter"]
 
 [workspace.dependencies]
 red-lox-ast = {path = "red-lox-ast"}

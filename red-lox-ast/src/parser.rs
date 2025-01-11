@@ -40,9 +40,28 @@ pub struct Parser {
     current: usize,
 }
 
+pub struct ParseResult {
+    pub expr: Box<Expr>,
+    pub errors: Vec<ParseError>,
+}
+
 impl Parser {
     pub fn new(tokens: Vec<TokenWithLocation>) -> Self {
         Self { tokens, current: 0 }
+    }
+
+    pub fn parse(&mut self) -> ParseResult {
+        let expr = self.expression();
+        match expr {
+            Ok(expr) => ParseResult {
+                expr: expr,
+                errors: vec![],
+            },
+            Err(e) => ParseResult {
+                expr: Box::new(Expr::LiteralNil(Location { column: 0, line: 0 })),
+                errors: vec![e],
+            },
+        }
     }
 
     fn expression(&mut self) -> Result<Box<Expr>, ParseError> {

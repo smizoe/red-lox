@@ -1,14 +1,17 @@
-use crate::scanner::TokenWithLocation;
+use crate::scanner::{Location, TokenWithLocation};
 
 #[derive(Debug)]
 pub enum Expr {
     Binary {
         left: Box<Expr>,
-        right: Box<Expr>,
         operator: TokenWithLocation,
+        right: Box<Expr>,
     },
     Grouping(Box<Expr>),
-    Literal(TokenWithLocation),
+    LiteralNumber(f64, Location),
+    LiteralString(String, Location),
+    LiteralBool(bool, Location),
+    LiteralNil(Location),
     Unary {
         operator: TokenWithLocation,
         right: Box<Expr>,

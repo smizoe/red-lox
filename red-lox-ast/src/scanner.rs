@@ -88,8 +88,8 @@ impl Display for Location {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TokenWithLocation {
-    token: Token,
-    location: Location,
+    pub token: Token,
+    pub location: Location,
 }
 
 impl TokenWithLocation {
@@ -139,7 +139,7 @@ impl<'a> Scanner<'a> {
                 Ok(tok) => result.tokens.push(tok),
                 Err(e) => result.errors.push(e),
             }
-        self.junk();
+            self.junk();
         }
         result.tokens.push(TokenWithLocation::new(
             Token::Eof,

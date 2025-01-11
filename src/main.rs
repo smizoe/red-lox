@@ -26,7 +26,7 @@ mod internal {
         path::Path,
     };
 
-    use red_lox_ast::Scanner;
+    use red_lox_ast::scanner::Scanner;
 
     pub fn run_file(file_path: &Path) -> anyhow::Result<()> {
         let mut file = File::open(file_path)?;

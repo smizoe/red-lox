@@ -146,6 +146,12 @@ mod tests {
     use googletest::prelude::*;
     use rstest::rstest;
 
+    fn add_location(ts: Vec<Token>) -> Vec<TokenWithLocation> {
+        ts.into_iter()
+            .map(|tok| TokenWithLocation::new(tok, Location::default()))
+            .collect()
+    }
+
     #[rstest]
     #[case(Token::Nil, Expr::LiteralNil(Location::default()))]
     #[case(Token::False, Expr::LiteralBool(false, Location::default()))]
@@ -158,8 +164,39 @@ mod tests {
             TokenWithLocation::new(Token::Eof, Location::default()),
         ]);
         let result = parser.expression();
+        // TODO: Use googletest's ok matcher when it does not require Copy.
         assert!(result.is_ok(), "result was {:?}", result.err().unwrap());
         assert_eq!(*result.ok().unwrap(), expr);
+    }
+
+    #[rstest]
+    #[case(Token::Plus)]
+    #[case(Token::Minus)]
+    #[case(Token::Slash)]
+    #[case(Token::Star)]
+    #[case(Token::BangEqual)]
+    #[case(Token::EqualEqual)]
+    #[case(Token::Greater)]
+    #[case(Token::GreaterEqual)]
+    #[case(Token::Less)]
+    #[case(Token::LessEqual)]
+    fn parses_binary_ops(#[case] token: Token) {
+        let mut parser = Parser::new(add_location(vec![
+            Token::Number(1.),
+            token.clone(),
+            Token::Number(2.),
+            Token::Eof,
+        ]));
+        let result = parser.expression();
+        assert!(result.is_ok());
+        assert_eq!(
+            result.ok().unwrap(),
+            Box::new(Expr::Binary {
+                left: Box::new(Expr::LiteralNumber(1., Location::default())),
+                operator: TokenWithLocation::new(token, Location::default()),
+                right: Box::new(Expr::LiteralNumber(2., Location::default()))
+            })
+        )
     }
 
     #[gtest]
@@ -187,16 +224,16 @@ mod tests {
 
     #[test]
     fn parses_grouping() {
-        let mut parser = Parser::new(vec![
-            TokenWithLocation::new(Token::Number(1.), Location::default()),
-            TokenWithLocation::new(Token::Slash, Location::default()),
-            TokenWithLocation::new(Token::LeftParen, Location::default()),
-            TokenWithLocation::new(Token::Number(2.), Location::default()),
-            TokenWithLocation::new(Token::Minus, Location::default()),
-            TokenWithLocation::new(Token::Number(3.), Location::default()),
-            TokenWithLocation::new(Token::RightParen, Location::default()),
-            TokenWithLocation::new(Token::Eof, Location::default()),
-        ]);
+        let mut parser = Parser::new(add_location(vec![
+            Token::Number(1.),
+            Token::Slash,
+            Token::LeftParen,
+            Token::Number(2.),
+            Token::Minus,
+            Token::Number(3.),
+            Token::RightParen,
+            Token::Eof,
+        ]));
         let result = parser.expression();
         assert!(result.is_ok(), "result was {:?}", result.err().unwrap());
         assert_eq!(
@@ -213,6 +250,82 @@ mod tests {
                     Location::default()
                 ))
             }
+        );
+    }
+
+    #[test]
+    fn parses_plus_and_star_ops_with_correct_precedence() {
+        let mut parser = Parser::new(add_location(vec![
+            Token::Number(1.0),
+            Token::Plus,
+            Token::Number(2.0),
+            Token::Star,
+            Token::Number(3.0),
+            Token::Eof,
+        ]));
+        let result = parser.expression();
+        assert!(result.is_ok(), "result was {:?}", result.err().unwrap());
+        assert_eq!(
+            result.ok().unwrap(),
+            Box::new(Expr::Binary {
+                left: Box::new(Expr::LiteralNumber(1.0, Location::default())),
+                operator: TokenWithLocation::new(Token::Plus, Location::default()),
+                right: Box::new(Expr::Binary {
+                    left: Box::new(Expr::LiteralNumber(2.0, Location::default())),
+                    operator: TokenWithLocation::new(Token::Star, Location::default()),
+                    right: Box::new(Expr::LiteralNumber(3.0, Location::default()))
+                }),
+            })
+        )
+    }
+
+    #[test]
+    fn parses_minus_left_associative() {
+        let mut parser = Parser::new(add_location(vec![
+            Token::Number(1.0),
+            Token::Minus,
+            Token::Number(2.0),
+            Token::Minus,
+            Token::Number(3.0),
+            Token::Eof,
+        ]));
+        let result = parser.expression();
+        assert!(result.is_ok(), "result was {:?}", result.err().unwrap());
+        assert_eq!(
+            result.ok().unwrap(),
+            Box::new(Expr::Binary {
+                left: Box::new(Expr::Binary {
+                    left: Box::new(Expr::LiteralNumber(1.0, Location::default())),
+                    operator: TokenWithLocation::new(Token::Minus, Location::default()),
+                    right: Box::new(Expr::LiteralNumber(2.0, Location::default()))
+                }),
+                operator: TokenWithLocation::new(Token::Minus, Location::default()),
+                right: Box::new(Expr::LiteralNumber(3.0, Location::default()))
+            })
+        );
+    }
+
+    #[test]
+    fn parses_unary_minus_right_associative() {
+        let mut parser = Parser::new(add_location(vec![
+            Token::Number(1.0),
+            Token::Slash,
+            Token::Minus,
+            Token::Number(2.0),
+            Token::Eof,
+        ]));
+        let result = parser.expression();
+        assert!(result.is_ok(), "result was {:?}", result.err().unwrap());
+        assert_eq!(
+            result.ok().unwrap(),
+            Box::new(Expr::Binary {
+                left: Box::new(Expr::LiteralNumber(1.0, Location::default())),
+                operator: TokenWithLocation::new(Token::Slash, Location::default()),
+                right: Box::new(Expr::Unary {
+                    operator: TokenWithLocation::new(Token::Minus, Location::default()),
+                    right: Box::new(Expr::LiteralNumber(2.0, Location::default()))
+                })
+            })
         );
     }
 }

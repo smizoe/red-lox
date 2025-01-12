@@ -5,7 +5,7 @@ use crate::{
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-#[error("ParseError: {msg} at column {} in line {}", .location.column, .location.line)]
+#[error("{location}ParseError: {msg}")]
 pub struct ParseError {
     msg: String,
     location: Location,

@@ -82,7 +82,7 @@ pub struct Location {
 
 impl Display for Location {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "at column {} in line {}", self.column, self.line)
+        write!(f, "[at column {} in line {}]", self.column, self.line)
     }
 }
 
@@ -114,9 +114,9 @@ pub struct ScanResult {
 
 #[derive(Error, Debug)]
 pub enum TokenizationError {
-    #[error("Error: unexpected character {character} {location}")]
+    #[error("{location}TokenizationError: unexpected character {character}")]
     UnexpectedCharacterError { character: u8, location: Location },
-    #[error("Error: unexpected EOF while tokenizing string {location}")]
+    #[error("{location}TokenizationError: unexpected EOF while tokenizing string")]
     UnexpectedEofInStringError { location: Location },
 }
 

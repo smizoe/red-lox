@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use red_lox_ast::{
     expr::Expr,
     scanner::{Token, TokenWithLocation},
@@ -10,6 +12,18 @@ enum EvalResult {
     String(String),
     Number(f64),
     Bool(bool),
+}
+
+impl Display for EvalResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use EvalResult::*;
+        match self {
+            Nil => write!(f, "nil"),
+            String(s) => write!(f, "{}", s),
+            Number(v) => write!(f, "{}", v),
+            Bool(b) => write!(f, "{}", b),
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -30,6 +44,19 @@ enum EvalError {
 }
 
 struct Interpreter {}
+
+impl Interpreter {
+    pub fn interpret(&self, expr: &Expr) {
+        match self.visit_expr(expr) {
+            Ok(v) => {
+                println!("{}", v);
+            }
+            Err(e) => {
+                println!("{}", e)
+            }
+        }
+    }
+}
 
 fn handle_binary_op(
     left_expr: EvalResult,
@@ -92,7 +119,7 @@ fn handle_binary_op(
 }
 
 impl Visitor<Result<EvalResult, EvalError>> for Interpreter {
-    fn visit_expr(&mut self, expr: &Expr) -> Result<EvalResult, EvalError> {
+    fn visit_expr(&self, expr: &Expr) -> Result<EvalResult, EvalError> {
         use Expr::*;
         match expr {
             LiteralBool(b, _) => Ok(EvalResult::Bool(*b)),

@@ -74,7 +74,7 @@ pub enum Token {
     Eof,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Location {
     pub line: usize,
     pub column: usize,
@@ -93,7 +93,7 @@ pub struct TokenWithLocation {
 }
 
 impl TokenWithLocation {
-    fn new(token: Token, location: Location) -> Self {
+    pub fn new(token: Token, location: Location) -> Self {
         Self { token, location }
     }
 }

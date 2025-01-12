@@ -102,7 +102,7 @@ impl Parser {
                 match self.peek().token {
                     RightParen => {
                         self.advance();
-                        Ok(expr)
+                        Ok(Box::new(Expr::Grouping(expr, token.location.clone())))
                     }
                     _ => Err(ParseError {
                         msg: format!("Expected token ')', found {:?}", self.peek().token),
@@ -126,7 +126,8 @@ impl Parser {
         if !self.is_at_end() {
             self.current += 1;
         }
-        &self.tokens[self.current]
+        // checked_sub is used so this does not panic even when self.tokens consists only of Eof.
+        &self.tokens[self.current.checked_sub(1).unwrap_or(0)]
     }
 
     fn is_at_end(&self) -> bool {
@@ -135,5 +136,83 @@ impl Parser {
 
     fn peek(&self) -> &TokenWithLocation {
         &self.tokens[self.current]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::gtest;
+    use googletest::prelude::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case(Token::Nil, Expr::LiteralNil(Location::default()))]
+    #[case(Token::False, Expr::LiteralBool(false, Location::default()))]
+    #[case(Token::True, Expr::LiteralBool(true, Location::default()))]
+    #[case(Token::String("string".to_string()), Expr::LiteralString("string".to_string(), Location::default()))]
+    #[case(Token::Number(0.5), Expr::LiteralNumber(0.5, Location::default()))]
+    fn parses_literals(#[case] token: Token, #[case] expr: Expr) {
+        let mut parser = Parser::new(vec![
+            TokenWithLocation::new(token, Location::default()),
+            TokenWithLocation::new(Token::Eof, Location::default()),
+        ]);
+        let result = parser.expression();
+        assert!(result.is_ok(), "result was {:?}", result.err().unwrap());
+        assert_eq!(*result.ok().unwrap(), expr);
+    }
+
+    #[gtest]
+    fn returns_error_when_encountering_eof() {
+        let mut parser = Parser::new(vec![TokenWithLocation::new(
+            Token::Eof,
+            Location {
+                column: 10,
+                line: 20,
+            },
+        )]);
+        let result = parser.expression();
+        assert!(result.is_err());
+        expect_that!(
+            result.err().unwrap(),
+            matches_pattern!(ParseError {
+                msg: contains_substring("Eof reached while parsing an expression"),
+                location: eq(&Location {
+                    column: 10,
+                    line: 20
+                })
+            })
+        );
+    }
+
+    #[test]
+    fn parses_grouping() {
+        let mut parser = Parser::new(vec![
+            TokenWithLocation::new(Token::Number(1.), Location::default()),
+            TokenWithLocation::new(Token::Slash, Location::default()),
+            TokenWithLocation::new(Token::LeftParen, Location::default()),
+            TokenWithLocation::new(Token::Number(2.), Location::default()),
+            TokenWithLocation::new(Token::Minus, Location::default()),
+            TokenWithLocation::new(Token::Number(3.), Location::default()),
+            TokenWithLocation::new(Token::RightParen, Location::default()),
+            TokenWithLocation::new(Token::Eof, Location::default()),
+        ]);
+        let result = parser.expression();
+        assert!(result.is_ok(), "result was {:?}", result.err().unwrap());
+        assert_eq!(
+            *result.ok().unwrap(),
+            Expr::Binary {
+                left: Box::new(Expr::LiteralNumber(1., Location::default())),
+                operator: TokenWithLocation::new(Token::Slash, Location::default()),
+                right: Box::new(Expr::Grouping(
+                    Box::new(Expr::Binary {
+                        left: Box::new(Expr::LiteralNumber(2., Location::default())),
+                        operator: TokenWithLocation::new(Token::Minus, Location::default()),
+                        right: Box::new(Expr::LiteralNumber(3., Location::default())),
+                    }),
+                    Location::default()
+                ))
+            }
+        );
     }
 }

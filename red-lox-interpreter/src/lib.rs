@@ -15,9 +15,16 @@ enum EvalResult {
 #[derive(Debug, thiserror::Error)]
 enum EvalError {
     #[error("{}Operand of {:?} is expected be of type {expected_type} but {actual_result:?} is passed", .operator.location, .operator.token)]
-    InvalidOperandError {
+    InvalidUnaryOpOperandError {
         actual_result: EvalResult,
         expected_type: String,
+        operator: TokenWithLocation,
+    },
+    #[error("{}Operands of operator {:?} must {verb}, but the following were passed:\n    lhs: {lhs:?}\n    rhs: {rhs:?}", .operator.location, .operator.token)]
+    InvalidBinaryOpOperandError {
+        verb: String,
+        lhs: EvalResult,
+        rhs: EvalResult,
         operator: TokenWithLocation,
     },
 }
@@ -37,6 +44,12 @@ fn handle_binary_op(
             l.push_str(&r);
             Ok(EvalResult::String(l))
         }
+        (lhs, rhs, Token::Plus) => Err(EvalError::InvalidBinaryOpOperandError {
+            verb: "be two numbers or two strings".to_string(),
+            lhs,
+            rhs,
+            operator: operator.clone(),
+        }),
         (EvalResult::Number(l), EvalResult::Number(r), Token::Minus) => {
             Ok(EvalResult::Number(l - r))
         }
@@ -56,6 +69,22 @@ fn handle_binary_op(
         (EvalResult::Number(l), EvalResult::Number(r), Token::LessEqual) => {
             Ok(EvalResult::Bool(l <= r))
         }
+        (
+            l,
+            r,
+            Token::Minus
+            | Token::Slash
+            | Token::Star
+            | Token::Greater
+            | Token::GreaterEqual
+            | Token::Less
+            | Token::LessEqual,
+        ) => Err(EvalError::InvalidBinaryOpOperandError {
+            verb: "be two numbers".to_string(),
+            lhs: l,
+            rhs: r,
+            operator: operator.clone(),
+        }),
         (l, r, Token::BangEqual) => Ok(EvalResult::Bool(l != r)),
         (l, r, Token::EqualEqual) => Ok(EvalResult::Bool(l == r)),
         _ => unimplemented!(),
@@ -83,7 +112,7 @@ impl Visitor<Result<EvalResult, EvalError>> for Interpreter {
                 self.visit_expr(right)
                     .and_then(|r| match (&operator.token, r) {
                         (Token::Minus, EvalResult::Number(v)) => Ok(EvalResult::Number(-v)),
-                        (Token::Minus, r) => Err(EvalError::InvalidOperandError {
+                        (Token::Minus, r) => Err(EvalError::InvalidUnaryOpOperandError {
                             actual_result: r,
                             expected_type: "Number".to_string(),
                             operator: operator.clone(),

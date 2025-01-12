@@ -1,5 +1,5 @@
 use crate::expr::Expr;
 
-trait Visitor<R> {
+pub trait Visitor<R> {
     fn visit_expr(&mut self, expr: &Expr) -> R;
 }

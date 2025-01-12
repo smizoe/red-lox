@@ -114,9 +114,9 @@ pub struct ScanResult {
 
 #[derive(Error, Debug)]
 pub enum TokenizationError {
-    #[error("{location}TokenizationError: unexpected character {character}")]
+    #[error("{location} TokenizationError: unexpected character {character}")]
     UnexpectedCharacterError { character: u8, location: Location },
-    #[error("{location}TokenizationError: unexpected EOF while tokenizing string")]
+    #[error("{location} TokenizationError: unexpected EOF while tokenizing string")]
     UnexpectedEofInStringError { location: Location },
 }
 

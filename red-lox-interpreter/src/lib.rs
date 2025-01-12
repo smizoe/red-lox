@@ -28,13 +28,13 @@ impl Display for EvalResult {
 
 #[derive(Debug, thiserror::Error)]
 enum EvalError {
-    #[error("{}Operand of {:?} is expected be of type {expected_type} but {actual_result:?} is passed", .operator.location, .operator.token)]
+    #[error("{} Operand of {:?} is expected be of type {expected_type} but {actual_result:?} is passed", .operator.location, .operator.token)]
     InvalidUnaryOpOperandError {
         actual_result: EvalResult,
         expected_type: String,
         operator: TokenWithLocation,
     },
-    #[error("{}Operands of operator {:?} must {verb}, but the following were passed:\n    lhs: {lhs:?}\n    rhs: {rhs:?}", .operator.location, .operator.token)]
+    #[error("{} Operands of operator {:?} must {verb}, but the following were passed:\n    lhs: {lhs:?}\n    rhs: {rhs:?}", .operator.location, .operator.token)]
     InvalidBinaryOpOperandError {
         verb: String,
         lhs: EvalResult,
@@ -43,7 +43,7 @@ enum EvalError {
     },
 }
 
-struct Interpreter {}
+pub struct Interpreter {}
 
 impl Interpreter {
     pub fn interpret(&self, expr: &Expr) {
@@ -52,7 +52,8 @@ impl Interpreter {
                 println!("{}", v);
             }
             Err(e) => {
-                println!("{}", e)
+                println!("A runtime error occurred:");
+                println!("{}", e);
             }
         }
     }

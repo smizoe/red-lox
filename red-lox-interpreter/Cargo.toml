@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 thiserror = {workspace=true}
 red-lox-ast = {workspace=true}
+anyhow = "1.0.95"

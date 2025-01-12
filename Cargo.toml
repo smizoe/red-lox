@@ -18,3 +18,7 @@ thiserror = "2.0.9"
 ## dev-dependencies
 rstest = "0.24.0"
 googletest = "0.13.0"
+
+[[bin]]
+name = "red-lox"
+path = "red-lox-interpreter/src/main.rs"

@@ -1,6 +1,9 @@
+use std::fmt::format;
+
 use crate::{
     expr::Expr,
     scanner::{Location, Token, TokenWithLocation},
+    stmt::{self, Stmt},
 };
 use thiserror::Error;
 
@@ -40,8 +43,9 @@ pub struct Parser {
     current: usize,
 }
 
+#[derive(Default)]
 pub struct ParseResult {
-    pub expr: Box<Expr>,
+    pub stmts: Vec<Box<Stmt>>,
     pub errors: Vec<ParseError>,
 }
 
@@ -51,17 +55,36 @@ impl Parser {
     }
 
     pub fn parse(&mut self) -> ParseResult {
-        let expr = self.expression();
-        match expr {
-            Ok(expr) => ParseResult {
-                expr: expr,
-                errors: vec![],
-            },
-            Err(e) => ParseResult {
-                expr: Box::new(Expr::LiteralNil(Location { column: 0, line: 0 })),
-                errors: vec![e],
-            },
+        let mut result = ParseResult::default();
+        while !self.is_at_end() {
+            match self.statement() {
+                Ok(stmt) => result.stmts.push(stmt),
+                Err(e) => result.errors.push(e),
+            }
         }
+        result
+    }
+
+    fn statement(&mut self) -> Result<Box<Stmt>, ParseError> {
+        if self.peek().token == Token::Print {
+            self.advance();
+            let expr = self.expression()?;
+            self.consume(Token::Semicolon, |t| {
+                format!(
+                    "Expected ';' after value to print, found {:?} instead.",
+                    t.token
+                )
+            })?;
+            return Ok(Box::new(Stmt::Print(expr)));
+        }
+        let expr = self.expression()?;
+        self.consume(Token::Semicolon, |t| {
+            format!(
+                "Expected ';' after expression, found {:?} instead.",
+                t.token
+            )
+        })?;
+        Ok(Box::new(Stmt::Expression(expr)))
     }
 
     fn expression(&mut self) -> Result<Box<Expr>, ParseError> {
@@ -99,16 +122,10 @@ impl Parser {
             String(s) => Ok(Box::new(Expr::LiteralString(s.clone(), token.location))),
             LeftParen => {
                 let expr = self.expression()?;
-                match self.peek().token {
-                    RightParen => {
-                        self.advance();
-                        Ok(Box::new(Expr::Grouping(expr, token.location.clone())))
-                    }
-                    _ => Err(ParseError {
-                        msg: format!("Expected token ')', found {:?}", self.peek().token),
-                        location: self.peek().location.clone(),
-                    }),
-                }
+                self.consume(RightParen, |t| {
+                    format!("Expected token ')', found {:?}", t.token)
+                })?;
+                Ok(Box::new(Expr::Grouping(expr, token.location.clone())))
             }
             Eof => Err(ParseError {
                 msg: "Eof reached while parsing an expression".to_string(),
@@ -128,6 +145,20 @@ impl Parser {
         }
         // checked_sub is used so this does not panic even when self.tokens consists only of Eof.
         &self.tokens[self.current.checked_sub(1).unwrap_or(0)]
+    }
+
+    fn consume<F>(&mut self, token: Token, msg_gen: F) -> Result<(), ParseError>
+    where
+        F: FnOnce(&TokenWithLocation) -> String,
+    {
+        if self.peek().token != token {
+            return Err(ParseError {
+                msg: msg_gen(self.peek()),
+                location: self.peek().location.clone(),
+            });
+        }
+        self.advance();
+        Ok(())
     }
 
     fn is_at_end(&self) -> bool {

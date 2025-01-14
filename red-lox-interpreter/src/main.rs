@@ -62,7 +62,7 @@ fn run(prog: &str) -> anyhow::Result<()> {
         return Err(anyhow::anyhow!("Error"));
     }
     let mut parser = Parser::new(result.tokens);
-    let mut result = parser.parse();
+    let result = parser.parse();
     if !result.errors.is_empty() {
         println!("One or more errors occurred during parsing the expression:");
         for e in result.errors.iter() {
@@ -71,6 +71,6 @@ fn run(prog: &str) -> anyhow::Result<()> {
         return Err(anyhow::anyhow!("Error"));
     }
     let interpreter = Interpreter {};
-    interpreter.interpret(&result.expr);
+    interpreter.interpret(&result.stmts);
     Ok(())
 }

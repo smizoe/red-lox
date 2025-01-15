@@ -44,6 +44,8 @@ pub enum Error {
         rhs: Value,
         operator: TokenWithLocation,
     },
+    #[error("{} Undefined variable {:?} found", .0.location, .0.token)]
+    UndefinedVariableError(TokenWithLocation),
 }
 
 fn handle_binary_op(
@@ -146,6 +148,9 @@ impl Visitor<Result<Value, Error>> for Interpreter {
                         operator.token
                     ),
                 }
+            }
+            Variable(t) => {
+                self.environment.get(t).cloned()
             }
         }
     }

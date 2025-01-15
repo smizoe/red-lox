@@ -32,11 +32,12 @@ pub fn run_file(file_path: &Path) -> anyhow::Result<()> {
     let mut file = File::open(file_path)?;
     let mut s = String::new();
     file.read_to_string(&mut s)?;
-    run(&s)
+    run(&mut Interpreter::new(), &s)
 }
 
 pub fn run_prompt() -> anyhow::Result<()> {
     let mut line = String::new();
+    let mut interpreter = Interpreter::new();
     loop {
         print!("> ");
         stdout().flush()?;
@@ -46,12 +47,12 @@ pub fn run_prompt() -> anyhow::Result<()> {
             // Ctrl-d
             break;
         }
-        let _ = run(&line);
+        let _ = run(&mut interpreter, &line);
     }
     Ok(())
 }
 
-fn run(prog: &str) -> anyhow::Result<()> {
+fn run(interpreter: &mut Interpreter, prog: &str) -> anyhow::Result<()> {
     let mut scanner = Scanner::new(prog);
     let result = scanner.scan_tokens();
     if !result.errors.is_empty() {
@@ -70,7 +71,6 @@ fn run(prog: &str) -> anyhow::Result<()> {
         }
         return Err(anyhow::anyhow!("Error"));
     }
-    let interpreter = Interpreter {};
     interpreter.interpret(&result.stmts);
     Ok(())
 }

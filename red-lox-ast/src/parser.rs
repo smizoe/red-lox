@@ -206,7 +206,7 @@ impl Parser {
         P: FnOnce(&Token) -> bool,
         F: FnOnce(&TokenWithLocation) -> String,
     {
-        if expected_token_pred(&self.peek().token) {
+        if !expected_token_pred(&self.peek().token) {
             return Err(ParseError {
                 msg: msg_gen(self.peek()),
                 location: self.peek().location.clone(),

@@ -1,3 +1,4 @@
+use red_lox_ast::scanner::{Location, Token, TokenWithLocation};
 use red_lox_ast::{expr::Expr, stmt::Stmt, visitor::Visitor};
 
 use crate::expr;
@@ -6,13 +7,13 @@ use crate::{expr::Value, Interpreter};
 pub enum Action {
     Print(Value),
     Eval(Value),
+    Define(Token, Value)
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Failed to evaluate the expression of the statement: {}", .0)]
     ExprEvalError(expr::Error),
-    // TODO: other errors (e.g., referring undefined variable)
 }
 
 impl Visitor<Result<Action, Error>> for Interpreter {
@@ -32,6 +33,13 @@ impl Visitor<Result<Action, Error>> for Interpreter {
                     Err(e) => Err(Error::ExprEvalError(e)),
                 }
             }
+            Stmt::Var(t, expr) => match expr.as_ref() {
+                Some(e) => match Visitor::<Result<Value, expr::Error>>::visit_expr(self, e) {
+                    Ok(v) => Ok(Action::Define(t.clone(), v)),
+                    Err(e) => Err(Error::ExprEvalError(e)),
+                },
+                None => Ok(Action::Define(t.clone(), Value::Nil)),
+            },
         }
     }
 }

@@ -1,9 +1,7 @@
-use std::fmt::format;
-
 use crate::{
     expr::Expr,
     scanner::{Location, Token, TokenWithLocation},
-    stmt::{self, Stmt},
+    stmt::Stmt,
 };
 use thiserror::Error;
 
@@ -57,7 +55,7 @@ impl Parser {
     pub fn parse(&mut self) -> ParseResult {
         let mut result = ParseResult::default();
         while !self.is_at_end() {
-            match self.statement() {
+            match self.declaration() {
                 Ok(stmt) => result.stmts.push(stmt),
                 Err(e) => result.errors.push(e),
             }
@@ -65,25 +63,75 @@ impl Parser {
         result
     }
 
+    fn declaration(&mut self) -> Result<Box<Stmt>, ParseError> {
+        let stmt = match self.peek().token {
+            Token::Var => {
+                self.advance();
+                self.var_declaration()
+            }
+            _ => self.statement(),
+        };
+        if stmt.is_err() {
+            self.synchronize();
+        }
+        stmt
+    }
+
+    fn var_declaration(&mut self) -> Result<Box<Stmt>, ParseError> {
+        let token = self
+            .consume(
+                |t| match t {
+                    Token::Identifier(_) => true,
+                    _ => false,
+                },
+                |t: &TokenWithLocation| format!("Expect variable name, found {:?}", t.token),
+            )?
+            .token
+            .clone();
+        let expr = if self.peek().token == Token::Equal {
+            self.advance();
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.consume(
+            |t| t == &Token::Semicolon,
+            |t| {
+                format!(
+                    "Expected ';' after variable declaration, found {:?}.",
+                    t.token
+                )
+            },
+        )?;
+        Ok(Box::new(Stmt::Var(token, expr)))
+    }
+
     fn statement(&mut self) -> Result<Box<Stmt>, ParseError> {
         if self.peek().token == Token::Print {
             self.advance();
             let expr = self.expression()?;
-            self.consume(Token::Semicolon, |t| {
-                format!(
-                    "Expected ';' after value to print, found {:?} instead.",
-                    t.token
-                )
-            })?;
+            self.consume(
+                |t| t == &Token::Semicolon,
+                |t: &TokenWithLocation| {
+                    format!(
+                        "Expected ';' after value to print, found {:?} instead.",
+                        t.token
+                    )
+                },
+            )?;
             return Ok(Box::new(Stmt::Print(expr)));
         }
         let expr = self.expression()?;
-        self.consume(Token::Semicolon, |t| {
-            format!(
-                "Expected ';' after expression, found {:?} instead.",
-                t.token
-            )
-        })?;
+        self.consume(
+            |t| t == &Token::Semicolon,
+            |t: &TokenWithLocation| {
+                format!(
+                    "Expected ';' after expression, found {:?} instead.",
+                    t.token
+                )
+            },
+        )?;
         Ok(Box::new(Stmt::Expression(expr)))
     }
 
@@ -120,11 +168,13 @@ impl Parser {
             Nil => Ok(Box::new(Expr::LiteralNil(token.location))),
             Number(v) => Ok(Box::new(Expr::LiteralNumber(*v, token.location))),
             String(s) => Ok(Box::new(Expr::LiteralString(s.clone(), token.location))),
+            Identifier(_) => Ok(Box::new(Expr::Variable(token))),
             LeftParen => {
                 let expr = self.expression()?;
-                self.consume(RightParen, |t| {
-                    format!("Expected token ')', found {:?}", t.token)
-                })?;
+                self.consume(
+                    |t| t == &RightParen,
+                    |t: &TokenWithLocation| format!("Expected token ')', found {:?}", t.token),
+                )?;
                 Ok(Box::new(Expr::Grouping(expr, token.location.clone())))
             }
             Eof => Err(ParseError {
@@ -147,18 +197,38 @@ impl Parser {
         &self.tokens[self.current.checked_sub(1).unwrap_or(0)]
     }
 
-    fn consume<F>(&mut self, token: Token, msg_gen: F) -> Result<(), ParseError>
+    fn consume<P, F>(
+        &mut self,
+        expected_token_pred: P,
+        msg_gen: F,
+    ) -> Result<&TokenWithLocation, ParseError>
     where
+        P: FnOnce(&Token) -> bool,
         F: FnOnce(&TokenWithLocation) -> String,
     {
-        if self.peek().token != token {
+        if expected_token_pred(&self.peek().token) {
             return Err(ParseError {
                 msg: msg_gen(self.peek()),
                 location: self.peek().location.clone(),
             });
         }
-        self.advance();
-        Ok(())
+        Ok(self.advance())
+    }
+
+    fn synchronize(&mut self) {
+        use Token::*;
+        while !self.is_at_end() {
+            match self.peek().token {
+                Semicolon => {
+                    self.advance();
+                    break;
+                }
+                Class | For | Fun | If | Print | Return | Var | While => break,
+                _ => {
+                    self.advance();
+                }
+            }
+        }
     }
 
     fn is_at_end(&self) -> bool {

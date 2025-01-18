@@ -8,7 +8,7 @@ use red_lox_ast::{scanner::Token, stmt::Stmt, visitor::Visitor};
 
 #[derive(Default)]
 pub struct Interpreter {
-    environment: Environment,
+    environment: Box<Environment>,
 }
 
 impl Interpreter {
@@ -18,24 +18,30 @@ impl Interpreter {
 
     pub fn interpret(&mut self, stmts: &Vec<Box<Stmt>>) {
         for stmt in stmts.iter() {
-            match Visitor::<Result<Action, Error>>::visit_stmt(self, stmt) {
-                Ok(a) => match a {
-                    Action::Print(v) => println!("{}", v),
-                    Action::Eval(_) => (),
-                    Action::Define(t, v) => {
-                        let name = match t {
-                            Token::Identifier(n) => n,
-                            _ => unreachable!(),
-                        };
-                        self.environment.define(name, v);
-                    }
-                },
+            match self.execute(stmt) {
+                Ok(()) => (),
                 Err(e) => {
                     println!("A runtime error occurred:");
                     println!("{}", e);
                 }
             }
         }
+    }
+
+    fn execute(&mut self, stmt: &Stmt) -> Result<(), Error> {
+        let action = Visitor::<Result<Action, Error>>::visit_stmt(self, stmt)?;
+        match action {
+            Action::Print(v) => println!("{}", v),
+            Action::Eval(_) => (),
+            Action::Define(t, v) => {
+                let name = match t {
+                    Token::Identifier(n) => n,
+                    _ => unreachable!(),
+                };
+                self.environment.define(name, v);
+            }
+        }
+        Ok(())
     }
 }
 

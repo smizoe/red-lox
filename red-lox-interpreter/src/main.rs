@@ -16,7 +16,10 @@ fn main() -> ExitCode {
     } else if args.len() == 1 {
         match run_file(Path::new(&args[0])) {
             Ok(_) => ExitCode::SUCCESS,
-            Err(_) => ExitCode::FAILURE,
+            Err(e) => {
+                eprintln!("One or more errors occurred: {:}", e);
+                ExitCode::FAILURE
+            }
         }
     } else {
         match run_prompt() {

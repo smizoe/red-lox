@@ -132,7 +132,7 @@ impl Visitor<Result<Value, Error>> for Interpreter {
                     ),
                 }
             }
-            Variable(t) => self.environment.get(t).cloned(),
+            Variable(t) => self.environment.get(t),
             Assign { name, expr } => {
                 let value = Visitor::<Result<Value, Error>>::visit_expr(self, &expr)?;
                 self.environment.assign(name, value)

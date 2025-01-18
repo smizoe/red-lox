@@ -108,31 +108,52 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<Box<Stmt>, ParseError> {
-        if self.peek().token == Token::Print {
-            self.advance();
-            let expr = self.expression()?;
-            self.consume(
-                |t| t == &Token::Semicolon,
-                |t: &TokenWithLocation| {
-                    format!(
-                        "Expected ';' after value to print, found {:?} instead.",
-                        t.token
-                    )
-                },
-            )?;
-            return Ok(Box::new(Stmt::Print(expr)));
+        match self.peek().token {
+            Token::Print => {
+                self.advance();
+                let expr = self.expression()?;
+                self.consume(
+                    |t| t == &Token::Semicolon,
+                    |t: &TokenWithLocation| {
+                        format!(
+                            "Expected ';' after value to print, found {:?} instead.",
+                            t.token
+                        )
+                    },
+                )?;
+                Ok(Box::new(Stmt::Print(expr)))
+            }
+            Token::LeftBrace => {
+                self.advance();
+                Ok(Box::new(Stmt::Block(self.block()?)))
+            }
+            _ => {
+                let expr = self.expression()?;
+                self.consume(
+                    |t| t == &Token::Semicolon,
+                    |t: &TokenWithLocation| {
+                        format!(
+                            "Expected ';' after expression, found {:?} instead.",
+                            t.token
+                        )
+                    },
+                )?;
+                Ok(Box::new(Stmt::Expression(expr)))
+            }
         }
-        let expr = self.expression()?;
+    }
+
+    fn block(&mut self) -> Result<Vec<Box<Stmt>>, ParseError> {
+        let mut statements = Vec::new();
+
+        while self.peek().token != Token::RightBrace && !self.is_at_end() {
+            statements.push(self.declaration()?);
+        }
         self.consume(
-            |t| t == &Token::Semicolon,
-            |t: &TokenWithLocation| {
-                format!(
-                    "Expected ';' after expression, found {:?} instead.",
-                    t.token
-                )
-            },
+            |t| t == &Token::RightBrace,
+            |t| format!("Expected '}}', found {:?}", t),
         )?;
-        Ok(Box::new(Stmt::Expression(expr)))
+        Ok(statements)
     }
 
     fn expression(&mut self) -> Result<Box<Expr>, ParseError> {

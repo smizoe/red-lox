@@ -7,7 +7,7 @@ use crate::{expr::Value, Interpreter};
 pub enum Action {
     Print(Value),
     Eval(Value),
-    Define(Token, Value)
+    Define(Token, Value),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -40,6 +40,17 @@ impl Visitor<Result<Action, Error>> for Interpreter {
                 },
                 None => Ok(Action::Define(t.clone(), Value::Nil)),
             },
+            Stmt::Block(stmts) => {
+                self.environment.enter();
+                for stmt in stmts {
+                    if let Err(e) = self.execute(&stmt) {
+                        self.environment.exit();
+                        return Err(e);
+                    }
+                }
+                self.environment.exit();
+                Ok(Action::Eval(Value::Nil))
+            }
         }
     }
 }

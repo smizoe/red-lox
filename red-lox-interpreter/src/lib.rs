@@ -1,11 +1,11 @@
+pub mod command;
 mod environment;
 mod expr;
 mod stmt;
-pub mod command;
 
 use crate::stmt::{Action, Error};
 use environment::Environment;
-use red_lox_ast::{scanner::Token, stmt::Stmt, visitor::Visitor};
+use red_lox_ast::{scanner::Token, stmt::{Stmt, Evaluator}};
 
 #[derive(Default)]
 pub struct Interpreter {
@@ -30,7 +30,7 @@ impl Interpreter {
     }
 
     fn execute(&mut self, stmt: &Stmt) -> Result<(), Error> {
-        let action = Visitor::<Result<Action, Error>>::visit_stmt(self, stmt)?;
+        let action = self.evaluate_stmt(stmt)?;
         match action {
             Action::Print(v) => println!("{}", v),
             Action::Eval(_) => (),

@@ -6,3 +6,7 @@ pub enum Stmt {
     Var(Token, Option<Box<Expr>>),
     Block(Vec<Box<Stmt>>),
 }
+
+pub trait Evaluator<R> {
+    fn evaluate_stmt(&mut self, stmt: &Stmt) -> R;
+}

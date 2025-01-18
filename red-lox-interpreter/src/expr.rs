@@ -1,10 +1,8 @@
 use std::fmt::Display;
 
 use red_lox_ast::{
-    expr::Expr,
+    expr::{Evaluator, Expr},
     scanner::{Token, TokenWithLocation},
-    stmt::Stmt,
-    visitor::Visitor,
 };
 
 use crate::Interpreter;
@@ -94,26 +92,26 @@ fn handle_binary_op(
     }
 }
 
-impl Visitor<Result<Value, Error>> for Interpreter {
-    fn visit_expr(&mut self, expr: &Expr) -> Result<Value, Error> {
+impl Evaluator<Result<Value, Error>> for Interpreter {
+    fn evaluate_expr(&mut self, expr: &Expr) -> Result<Value, Error> {
         use Expr::*;
         match expr {
             LiteralBool(b, _) => Ok(Value::Bool(*b)),
             LiteralNil(_) => Ok(Value::Nil),
             LiteralNumber(v, _) => Ok(Value::Number(*v)),
             LiteralString(s, _) => Ok(Value::String(s.clone())),
-            Grouping(e, _) => self.visit_expr(e),
+            Grouping(e, _) => self.evaluate_expr(e),
             Binary {
                 left,
                 operator,
                 right,
             } => {
-                let le: Value = Visitor::<Result<Value, Error>>::visit_expr(self, left)?;
-                let re: Value = Visitor::<Result<Value, Error>>::visit_expr(self, right)?;
+                let le: Value = self.evaluate_expr(left)?;
+                let re: Value = self.evaluate_expr(right)?;
                 handle_binary_op(le, re, operator)
             }
             Unary { operator, right } => {
-                let r: Value = Visitor::<Result<Value, Error>>::visit_expr(self, right)?;
+                let r: Value = self.evaluate_expr(right)?;
                 match (&operator.token, r) {
                     (Token::Minus, Value::Number(v)) => Ok(Value::Number(-v)),
                     (Token::Minus, r) => Err(Error::InvalidUnaryOpOperandError {
@@ -134,13 +132,9 @@ impl Visitor<Result<Value, Error>> for Interpreter {
             }
             Variable(t) => self.environment.get(t),
             Assign { name, expr } => {
-                let value = Visitor::<Result<Value, Error>>::visit_expr(self, &expr)?;
+                let value = self.evaluate_expr(&expr)?;
                 self.environment.assign(name, value)
             }
         }
-    }
-
-    fn visit_stmt(&mut self, _: &Stmt) -> Result<Value, Error> {
-        unimplemented!()
     }
 }

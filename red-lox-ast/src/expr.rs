@@ -22,3 +22,7 @@ pub enum Expr {
         expr: Box<Expr>,
     },
 }
+
+pub trait Evaluator<R> {
+    fn evaluate_expr(&mut self, expr: &Expr) -> R;
+}

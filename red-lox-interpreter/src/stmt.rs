@@ -1,5 +1,8 @@
-use red_lox_ast::scanner::{Location, Token, TokenWithLocation};
-use red_lox_ast::{expr::Expr, stmt::Stmt, visitor::Visitor};
+use red_lox_ast::expr::Evaluator as _;
+use red_lox_ast::{
+    scanner::Token,
+    stmt::{Evaluator, Stmt},
+};
 
 use crate::expr;
 use crate::{expr::Value, Interpreter};
@@ -16,25 +19,19 @@ pub enum Error {
     ExprEvalError(expr::Error),
 }
 
-impl Visitor<Result<Action, Error>> for Interpreter {
-    fn visit_expr(&mut self, _: &Expr) -> Result<Action, Error> {
-        unimplemented!()
-    }
-
-    fn visit_stmt(&mut self, stmt: &Stmt) -> Result<Action, Error> {
+impl Evaluator<Result<Action, Error>> for Interpreter {
+    fn evaluate_stmt(&mut self, stmt: &Stmt) -> Result<Action, Error> {
         match stmt {
-            Stmt::Print(e) => match Visitor::<Result<Value, expr::Error>>::visit_expr(self, e) {
+            Stmt::Print(e) => match self.evaluate_expr(e) {
                 Ok(v) => Ok(Action::Print(v)),
                 Err(e) => Err(Error::ExprEvalError(e)),
             },
-            Stmt::Expression(e) => {
-                match Visitor::<Result<Value, expr::Error>>::visit_expr(self, e) {
-                    Ok(v) => Ok(Action::Eval(v)),
-                    Err(e) => Err(Error::ExprEvalError(e)),
-                }
-            }
+            Stmt::Expression(e) => match self.evaluate_expr(e) {
+                Ok(v) => Ok(Action::Eval(v)),
+                Err(e) => Err(Error::ExprEvalError(e)),
+            },
             Stmt::Var(t, expr) => match expr.as_ref() {
-                Some(e) => match Visitor::<Result<Value, expr::Error>>::visit_expr(self, e) {
+                Some(e) => match self.evaluate_expr(e) {
                     Ok(v) => Ok(Action::Define(t.clone(), v)),
                     Err(e) => Err(Error::ExprEvalError(e)),
                 },

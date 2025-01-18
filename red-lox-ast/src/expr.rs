@@ -17,4 +17,8 @@ pub enum Expr {
         right: Box<Expr>,
     },
     Variable(TokenWithLocation),
+    Assign {
+        name: TokenWithLocation,
+        expr: Box<Expr>,
+    },
 }

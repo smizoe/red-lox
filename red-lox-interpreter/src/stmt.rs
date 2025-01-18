@@ -17,11 +17,11 @@ pub enum Error {
 }
 
 impl Visitor<Result<Action, Error>> for Interpreter {
-    fn visit_expr(&self, _: &Expr) -> Result<Action, Error> {
+    fn visit_expr(&mut self, _: &Expr) -> Result<Action, Error> {
         unimplemented!()
     }
 
-    fn visit_stmt(&self, stmt: &Stmt) -> Result<Action, Error> {
+    fn visit_stmt(&mut self, stmt: &Stmt) -> Result<Action, Error> {
         match stmt {
             Stmt::Print(e) => match Visitor::<Result<Value, expr::Error>>::visit_expr(self, e) {
                 Ok(v) => Ok(Action::Print(v)),

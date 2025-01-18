@@ -27,4 +27,18 @@ impl Environment {
             .get(name)
             .ok_or(expr::Error::UndefinedVariableError(token.clone()))
     }
+
+    pub fn assign(&mut self, token: &TokenWithLocation, val: Value) -> Result<Value, expr::Error> {
+        let name = match &token.token {
+            Token::Identifier(n) => n,
+            _ => unreachable!(),
+        };
+        match self.values.get_mut(name) {
+            Some(v) => {
+                *v = val;
+                Ok(v.clone())
+            }
+            None => Err(expr::Error::UndefinedVariableError(token.clone())),
+        }
+    }
 }

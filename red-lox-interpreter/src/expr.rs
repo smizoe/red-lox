@@ -54,9 +54,7 @@ fn handle_binary_op(
     operator: &TokenWithLocation,
 ) -> Result<Value, Error> {
     match (left_expr, right_expr, &operator.token) {
-        (Value::Number(l), Value::Number(r), Token::Plus) => {
-            Ok(Value::Number(l + r))
-        }
+        (Value::Number(l), Value::Number(r), Token::Plus) => Ok(Value::Number(l + r)),
         (Value::String(mut l), Value::String(r), Token::Plus) => {
             l.push_str(&r);
             Ok(Value::String(l))
@@ -67,25 +65,13 @@ fn handle_binary_op(
             rhs,
             operator: operator.clone(),
         }),
-        (Value::Number(l), Value::Number(r), Token::Minus) => {
-            Ok(Value::Number(l - r))
-        }
-        (Value::Number(l), Value::Number(r), Token::Slash) => {
-            Ok(Value::Number(l / r))
-        }
-        (Value::Number(l), Value::Number(r), Token::Star) => {
-            Ok(Value::Number(l * r))
-        }
-        (Value::Number(l), Value::Number(r), Token::Greater) => {
-            Ok(Value::Bool(l > r))
-        }
-        (Value::Number(l), Value::Number(r), Token::GreaterEqual) => {
-            Ok(Value::Bool(l >= r))
-        }
+        (Value::Number(l), Value::Number(r), Token::Minus) => Ok(Value::Number(l - r)),
+        (Value::Number(l), Value::Number(r), Token::Slash) => Ok(Value::Number(l / r)),
+        (Value::Number(l), Value::Number(r), Token::Star) => Ok(Value::Number(l * r)),
+        (Value::Number(l), Value::Number(r), Token::Greater) => Ok(Value::Bool(l > r)),
+        (Value::Number(l), Value::Number(r), Token::GreaterEqual) => Ok(Value::Bool(l >= r)),
         (Value::Number(l), Value::Number(r), Token::Less) => Ok(Value::Bool(l < r)),
-        (Value::Number(l), Value::Number(r), Token::LessEqual) => {
-            Ok(Value::Bool(l <= r))
-        }
+        (Value::Number(l), Value::Number(r), Token::LessEqual) => Ok(Value::Bool(l <= r)),
         (
             l,
             r,
@@ -109,7 +95,7 @@ fn handle_binary_op(
 }
 
 impl Visitor<Result<Value, Error>> for Interpreter {
-    fn visit_expr(&self, expr: &Expr) -> Result<Value, Error> {
+    fn visit_expr(&mut self, expr: &Expr) -> Result<Value, Error> {
         use Expr::*;
         match expr {
             LiteralBool(b, _) => Ok(Value::Bool(*b)),
@@ -122,15 +108,12 @@ impl Visitor<Result<Value, Error>> for Interpreter {
                 operator,
                 right,
             } => {
-                let le: Value =
-                    Visitor::<Result<Value, Error>>::visit_expr(self, left)?;
-                let re: Value =
-                    Visitor::<Result<Value, Error>>::visit_expr(self, right)?;
+                let le: Value = Visitor::<Result<Value, Error>>::visit_expr(self, left)?;
+                let re: Value = Visitor::<Result<Value, Error>>::visit_expr(self, right)?;
                 handle_binary_op(le, re, operator)
             }
             Unary { operator, right } => {
-                let r: Value =
-                    Visitor::<Result<Value, Error>>::visit_expr(self, right)?;
+                let r: Value = Visitor::<Result<Value, Error>>::visit_expr(self, right)?;
                 match (&operator.token, r) {
                     (Token::Minus, Value::Number(v)) => Ok(Value::Number(-v)),
                     (Token::Minus, r) => Err(Error::InvalidUnaryOpOperandError {
@@ -149,13 +132,15 @@ impl Visitor<Result<Value, Error>> for Interpreter {
                     ),
                 }
             }
-            Variable(t) => {
-                self.environment.get(t).cloned()
+            Variable(t) => self.environment.get(t).cloned(),
+            Assign { name, expr } => {
+                let value = Visitor::<Result<Value, Error>>::visit_expr(self, &expr)?;
+                self.environment.assign(name, value)
             }
         }
     }
 
-    fn visit_stmt(&self, _: &Stmt) -> Result<Value, Error> {
+    fn visit_stmt(&mut self, _: &Stmt) -> Result<Value, Error> {
         unimplemented!()
     }
 }

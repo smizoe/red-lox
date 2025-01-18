@@ -136,7 +136,33 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Result<Box<Expr>, ParseError> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Result<Box<Expr>, ParseError> {
+        let expr = self.equality()?;
+        match self.peek().token {
+            Token::Equal => {
+                let equals = self.advance().clone();
+                let value = self.assignment()?;
+                match *expr {
+                    Expr::Variable(
+                        t @ TokenWithLocation {
+                            token: Token::Identifier(_),
+                            ..
+                        },
+                    ) => Ok(Box::new(Expr::Assign {
+                        name: t,
+                        expr: value,
+                    })),
+                    _ => Err(ParseError {
+                        msg: "Invalid assignment target.".to_string(),
+                        location: equals.location,
+                    }),
+                }
+            }
+            _ => Ok(expr),
+        }
     }
 
     define_parsing_rule! {equality, comparison, BangEqual | EqualEqual}

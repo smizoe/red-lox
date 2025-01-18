@@ -1,6 +1,7 @@
 mod environment;
 mod expr;
 mod stmt;
+pub mod command;
 
 use crate::stmt::{Action, Error};
 use environment::Environment;

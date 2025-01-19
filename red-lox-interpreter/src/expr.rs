@@ -15,6 +15,16 @@ pub enum Value {
     Bool(bool),
 }
 
+impl Value {
+    fn is_truthy(&self) -> bool {
+        match self {
+            Value::Nil => false,
+            Value::Bool(b) => *b,
+            Value::Number(_) | Value::String(_) => true,
+        }
+    }
+}
+
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Value::*;
@@ -110,6 +120,14 @@ impl Evaluator<Result<Value, Error>> for Interpreter {
                 let re: Value = self.evaluate_expr(right)?;
                 handle_binary_op(le, re, operator)
             }
+            Ternary { cond, left, right } => {
+                let c = self.evaluate_expr(cond)?;
+                if c.is_truthy() {
+                    self.evaluate_expr(left)
+                } else {
+                    self.evaluate_expr(right)
+                }
+            }
             Unary { operator, right } => {
                 let r: Value = self.evaluate_expr(right)?;
                 match (&operator.token, r) {
@@ -119,11 +137,7 @@ impl Evaluator<Result<Value, Error>> for Interpreter {
                         expected_type: "Number".to_string(),
                         operator: operator.clone(),
                     }),
-                    (Token::Bang, r) => match r {
-                        Value::Nil => Ok(Value::Bool(false)),
-                        Value::Bool(b) => Ok(Value::Bool(!b)),
-                        Value::Number(_) | Value::String(_) => Ok(Value::Bool(true)),
-                    },
+                    (Token::Bang, r) => Ok(Value::Bool(!r.is_truthy())),
                     _ => panic!(
                         "Token {:?} is found when visiting Unary expr.",
                         operator.token

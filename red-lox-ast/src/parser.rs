@@ -157,7 +157,16 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Result<Box<Expr>, ParseError> {
-        self.assignment()
+        let expr = self.assignment();
+        if self.peek().token != Token::Comma {
+            return expr;
+        }
+        let mut exprs = vec![expr?];
+        while self.peek().token == Token::Comma {
+            self.advance();
+            exprs.push(self.expression()?);
+        }
+        Ok(Box::new(Expr::ExprSeries(exprs)))
     }
 
     fn assignment(&mut self) -> Result<Box<Expr>, ParseError> {

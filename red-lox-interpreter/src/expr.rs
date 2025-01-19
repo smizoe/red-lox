@@ -135,6 +135,13 @@ impl Evaluator<Result<Value, Error>> for Interpreter {
                 let value = self.evaluate_expr(&expr)?;
                 self.environment.assign(name, value)
             }
+            ExprSeries(exprs) => {
+                let mut last_value = self.evaluate_expr(&exprs[0])?;
+                for expr in exprs.iter().skip(1) {
+                    last_value = self.evaluate_expr(&expr)?;
+                }
+                Ok(last_value)
+            }
         }
     }
 }

@@ -1,0 +1,32 @@
+true + (1 != 1);
+// err: Failed to evaluate the expression of the statement: [at column 6 in line 1] Operands of operator Plus must be two numbers or one of them must be a string, but the following were passed:
+// err:     lhs: Bool
+// err:     rhs: Bool
+true / false;
+// err: Failed to evaluate the expression of the statement: [at column 6 in line 5] Operands of operator Slash must be two numbers, but the following were passed:
+// err:     lhs: Bool
+// err:     rhs: Bool
+"foo" * true;
+// err: Failed to evaluate the expression of the statement: [at column 7 in line 9] Operands of operator Star must be two numbers, but the following were passed:
+// err:     lhs: String
+// err:     rhs: Bool
+1 - false;
+// err: Failed to evaluate the expression of the statement: [at column 3 in line 13] Operands of operator Minus must be two numbers, but the following were passed:
+// err:     lhs: Number
+// err:     rhs: Bool
+1 < "foo";
+// err: Failed to evaluate the expression of the statement: [at column 3 in line 17] Operands of operator Less must be two numbers or two strings, but the following were passed:
+// err:     lhs: Number
+// err:     rhs: String
+1 <= "foo";
+// err: Failed to evaluate the expression of the statement: [at column 3 in line 21] Operands of operator LessEqual must be two numbers or two strings, but the following were passed:
+// err:     lhs: Number
+// err:     rhs: String
+1 > "foo";
+// err: Failed to evaluate the expression of the statement: [at column 3 in line 25] Operands of operator Greater must be two numbers or two strings, but the following were passed:
+// err:     lhs: Number
+// err:     rhs: String
+1 >= "foo";
+// err: Failed to evaluate the expression of the statement: [at column 3 in line 29] Operands of operator GreaterEqual must be two numbers or two strings, but the following were passed:
+// err:     lhs: Number
+// err:     rhs: String

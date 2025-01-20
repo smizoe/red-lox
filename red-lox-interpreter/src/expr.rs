@@ -33,6 +33,16 @@ impl Value {
             Bool(b) => b.to_string(),
         }
     }
+
+    fn to_type_str(&self) -> &'static str{
+        use Value::*;
+        match self {
+            Nil => "Nil",
+            String(_) => "String",
+            Number(_) => "Number",
+            Bool(_) => "Bool",
+        }
+    }
 }
 
 impl Display for Value {
@@ -55,9 +65,9 @@ pub enum Error {
         expected_type: String,
         operator: TokenWithLocation,
     },
-    #[error("{} Operands of operator {:?} must {verb}, but the following were passed:\n    lhs: {lhs:?}\n    rhs: {rhs:?}", .operator.location, .operator.token)]
+    #[error("{} Operands of operator {:?} {description}, but the following were passed:\n    lhs: {}\n    rhs: {}", .operator.location, .operator.token, .lhs.to_type_str(), .rhs.to_type_str())]
     InvalidBinaryOpOperandError {
-        verb: String,
+        description: String,
         lhs: Value,
         rhs: Value,
         operator: TokenWithLocation,
@@ -85,7 +95,7 @@ fn handle_binary_op(
             Ok(Value::String(l))
         }
         (lhs, rhs, Token::Plus) => Err(Error::InvalidBinaryOpOperandError {
-            verb: "be two numbers or two strings".to_string(),
+            description: "must be two numbers or one of them must be a string".to_string(),
             lhs,
             rhs,
             operator: operator.clone(),
@@ -98,6 +108,14 @@ fn handle_binary_op(
             Ok(Value::Number(l / r))
         }
         (Value::Number(l), Value::Number(r), Token::Star) => Ok(Value::Number(l * r)),
+        (l, r, Token::Minus | Token::Slash | Token::Star) => {
+            Err(Error::InvalidBinaryOpOperandError {
+                description: "must be two numbers".to_string(),
+                lhs: l,
+                rhs: r,
+                operator: operator.clone(),
+            })
+        }
         (Value::Number(l), Value::Number(r), Token::Greater) => Ok(Value::Bool(l > r)),
         (Value::Number(l), Value::Number(r), Token::GreaterEqual) => Ok(Value::Bool(l >= r)),
         (Value::Number(l), Value::Number(r), Token::Less) => Ok(Value::Bool(l < r)),
@@ -106,22 +124,14 @@ fn handle_binary_op(
         (Value::String(l), Value::String(r), Token::GreaterEqual) => Ok(Value::Bool(l >= r)),
         (Value::String(l), Value::String(r), Token::Less) => Ok(Value::Bool(l < r)),
         (Value::String(l), Value::String(r), Token::LessEqual) => Ok(Value::Bool(l <= r)),
-        (
-            l,
-            r,
-            Token::Minus
-            | Token::Slash
-            | Token::Star
-            | Token::Greater
-            | Token::GreaterEqual
-            | Token::Less
-            | Token::LessEqual,
-        ) => Err(Error::InvalidBinaryOpOperandError {
-            verb: "be two numbers".to_string(),
-            lhs: l,
-            rhs: r,
-            operator: operator.clone(),
-        }),
+        (l, r, Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual) => {
+            Err(Error::InvalidBinaryOpOperandError {
+                description: "must be two numbers or two strings".to_string(),
+                lhs: l,
+                rhs: r,
+                operator: operator.clone(),
+            })
+        }
         (l, r, Token::BangEqual) => Ok(Value::Bool(l != r)),
         (l, r, Token::EqualEqual) => Ok(Value::Bool(l == r)),
         _ => unimplemented!(),

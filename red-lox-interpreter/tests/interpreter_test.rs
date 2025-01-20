@@ -58,7 +58,7 @@ fn test_lox_interpreter(#[files("../tests/lox/**/*.lox")] path: PathBuf) {
 
 lazy_static! {
     static ref EXPECTATION_RE: Regex =
-        Regex::new(r"^.*//[[:space:]]*([[:word:]]+):[[:space:]]*(.*)$").unwrap();
+        Regex::new(r"^.*//[[:space:]]*([[:word:]]+):[[:space:]](.*)$").unwrap();
 }
 
 #[derive(Debug, Default)]

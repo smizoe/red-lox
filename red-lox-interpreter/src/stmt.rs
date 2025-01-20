@@ -33,8 +33,8 @@ impl<'a, 'b> Evaluator<Result<Action, Error>> for Interpreter<'a, 'b> {
                     .is_truthy()
                 {
                     self.evaluate_stmt(then_branch)
-                } else if let Some(stmt) = else_branch {
-                    self.evaluate_stmt(stmt)
+                } else if let Some(else_stmt) = else_branch {
+                    self.evaluate_stmt(else_stmt)
                 } else {
                     Ok(Action::Eval(Value::Nil))
                 }
@@ -43,6 +43,16 @@ impl<'a, 'b> Evaluator<Result<Action, Error>> for Interpreter<'a, 'b> {
                 Ok(v) => Ok(Action::Print(v)),
                 Err(e) => Err(Error::ExprEvalError(e)),
             },
+            Stmt::While { condition, body } => {
+                while self
+                    .evaluate_expr(condition)
+                    .map_err(Error::ExprEvalError)?
+                    .is_truthy()
+                {
+                    self.evaluate_stmt(body)?;
+                }
+                Ok(Action::Eval(Value::Nil))
+            }
             Stmt::Expression(e) => match self.evaluate_expr(e) {
                 Ok(v) => Ok(Action::Eval(v)),
                 Err(e) => Err(Error::ExprEvalError(e)),

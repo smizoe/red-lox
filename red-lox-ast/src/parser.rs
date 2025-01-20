@@ -148,6 +148,20 @@ impl Parser {
                 )?;
                 Ok(Box::new(Stmt::Print(expr)))
             }
+            Token::While => {
+                self.advance();
+                self.consume(
+                    |t| t == &Token::LeftParen,
+                    |t| format!("Expected '(' after 'while', found {:?}", t.token),
+                )?;
+                let condition = self.expression()?;
+                self.consume(
+                    |t| t == &Token::RightParen,
+                    |t| format!("Expected ')' after while condition, found {:?}", t.token),
+                )?;
+                let body = self.statement()?;
+                Ok(Box::new(Stmt::While { condition, body }))
+            }
             Token::LeftBrace => {
                 self.advance();
                 Ok(Box::new(Stmt::Block(self.block()?)))

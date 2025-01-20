@@ -30,8 +30,8 @@ impl<'a, 'b> Interpreter<'a, 'b> {
             match self.execute(stmt) {
                 Ok(()) => (),
                 Err(e) => {
-                    println!("A runtime error occurred:");
-                    println!("{}", e);
+                    writeln!(self.out, "A runtime error occurred:\n{}", e)
+                        .expect("failed to write to Interpreter's out");
                 }
             }
         }
@@ -40,7 +40,9 @@ impl<'a, 'b> Interpreter<'a, 'b> {
     fn execute(&mut self, stmt: &Stmt) -> Result<(), Error> {
         let action = self.evaluate_stmt(stmt)?;
         match action {
-            Action::Print(v) => println!("{}", v),
+            Action::Print(v) => {
+                writeln!(self.out, "{}", v).expect("failed to write to Interpreter's out");
+            }
             Action::Eval(_) => (),
             Action::Define(t, v) => {
                 let name = match t {

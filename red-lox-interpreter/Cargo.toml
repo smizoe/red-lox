@@ -9,3 +9,8 @@ edition = "2021"
 thiserror = {workspace=true}
 red-lox-ast = {workspace=true}
 anyhow = "1.0.95"
+
+[dev-dependencies]
+lazy_static = "1.5.0"
+regex = "1.11.1"
+rstest = {workspace=true}

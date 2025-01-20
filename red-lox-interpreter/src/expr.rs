@@ -102,6 +102,10 @@ fn handle_binary_op(
         (Value::Number(l), Value::Number(r), Token::GreaterEqual) => Ok(Value::Bool(l >= r)),
         (Value::Number(l), Value::Number(r), Token::Less) => Ok(Value::Bool(l < r)),
         (Value::Number(l), Value::Number(r), Token::LessEqual) => Ok(Value::Bool(l <= r)),
+        (Value::String(l), Value::String(r), Token::Greater) => Ok(Value::Bool(l > r)),
+        (Value::String(l), Value::String(r), Token::GreaterEqual) => Ok(Value::Bool(l >= r)),
+        (Value::String(l), Value::String(r), Token::Less) => Ok(Value::Bool(l < r)),
+        (Value::String(l), Value::String(r), Token::LessEqual) => Ok(Value::Bool(l <= r)),
         (
             l,
             r,

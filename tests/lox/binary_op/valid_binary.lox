@@ -15,3 +15,16 @@ var b = 0;
 a = 1, b = 2, 3;
 print a; // out: 1
 print b; // out: 2
+print "a" < "b"; // out: true
+print "a" > "b"; // out: false
+print "a" <= "a"; // out: true
+print "d" >= "a"; // out: true
+print "a" == "a"; // out: true
+print "a" != "d"; // out: true
+print 3 < -1; // out: false
+print 3 > -1; // out: true
+print -0 <= 0; // out: true
+print 1 >= 10; // out: false
+print -1 == 1; // out: false
+print nil == 1; // out: false
+print "a" != 3; // out: true

@@ -10,3 +10,8 @@ print 3    + "b"; // out: 3b
 print nil  + "b"; // out: b
 print false + "b"; // out: falseb
 print "a", 3; // out: 3
+var a = 0;
+var b = 0;
+a = 1, b = 2, 3;
+print a; // out: 1
+print b; // out: 2

@@ -20,11 +20,21 @@ fn test_lox_interpreter(#[files("../tests/lox/**/*.lox")] path: PathBuf) {
     }
     let mut scanner = Scanner::new(&content);
     let scan_result = scanner.scan_tokens();
-    assert_eq!(scan_result.errors.len(), 0);
+    assert_eq!(
+        scan_result.errors.len(),
+        0,
+        "ScanResult contains some errors: {:?}",
+        scan_result.errors
+    );
 
     let mut parser = Parser::new(scan_result.tokens);
     let parse_result = parser.parse();
-    assert_eq!(parse_result.errors.len(), 0);
+    assert_eq!(
+        parse_result.errors.len(),
+        0,
+        "ParseResult contains some errors: {:?}",
+        parse_result.errors
+    );
 
     let mut out = Cursor::new(Vec::new());
     let mut err = Cursor::new(Vec::new());

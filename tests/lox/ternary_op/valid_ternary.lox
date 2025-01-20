@@ -1,3 +1,8 @@
 print true ? 1 : 2;  // out:  1
 print false ? 1 : 2; // out:  2
 print true ? 1, "foo" : 2; // out: foo
+var a = 0;
+true ? 1 : a = 100;
+print a; // out: 0
+false ? 1 : a = 100;
+print a; // out: 100

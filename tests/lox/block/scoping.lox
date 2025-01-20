@@ -1,0 +1,19 @@
+var a = "global a";
+var b = "global b";
+var c = "global c";
+{
+    var a = "outer a";
+    var b = "outer b";
+    {
+        var a = "inner a";
+        print a; // out: inner a
+        print b; // out: outer b
+        print c; // out: global c
+    }
+    print a; // out: outer a
+    print b; // out: outer b
+    print c; // out: global c
+}
+print a; // out: global a
+print b; // out: global b
+print c; // out: global c

@@ -1,0 +1,4 @@
+var a = 1 + 2;
+var b = "foo" + a;
+print a; // out: 3
+print b; // out: foo3

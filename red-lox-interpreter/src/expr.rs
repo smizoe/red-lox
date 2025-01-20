@@ -102,7 +102,7 @@ fn handle_binary_op(
     }
 }
 
-impl Evaluator<Result<Value, Error>> for Interpreter {
+impl<'a, 'b> Evaluator<Result<Value, Error>> for Interpreter<'a, 'b> {
     fn evaluate_expr(&mut self, expr: &Expr) -> Result<Value, Error> {
         use Expr::*;
         match expr {

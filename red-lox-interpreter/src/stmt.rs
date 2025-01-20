@@ -19,7 +19,7 @@ pub enum Error {
     ExprEvalError(expr::Error),
 }
 
-impl Evaluator<Result<Action, Error>> for Interpreter {
+impl<'a, 'b> Evaluator<Result<Action, Error>> for Interpreter<'a, 'b> {
     fn evaluate_stmt(&mut self, stmt: &Stmt) -> Result<Action, Error> {
         match stmt {
             Stmt::Print(e) => match self.evaluate_expr(e) {

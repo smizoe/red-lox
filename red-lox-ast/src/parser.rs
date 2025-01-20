@@ -109,77 +109,85 @@ impl Parser {
 
     fn statement(&mut self) -> Result<Box<Stmt>, ParseError> {
         match self.peek().token {
-            Token::If => {
-                self.advance();
-                self.consume(
-                    |t| t == &Token::LeftParen,
-                    |t| format!("Expected '(' after 'if', found {:?}", t.token),
-                )?;
-                let condition = self.expression()?;
-                self.consume(
-                    |t| t == &Token::RightParen,
-                    |t| format!("Expected ')' after if condition, found {:?}", t.token),
-                )?;
-                let then_branch = self.statement()?;
-                let else_branch = match self.peek().token {
-                    Token::Else => {
-                        self.advance();
-                        Some(self.statement()?)
-                    }
-                    _ => None,
-                };
-                Ok(Box::new(Stmt::If {
-                    condition,
-                    then_branch,
-                    else_branch,
-                }))
-            }
-            Token::Print => {
-                self.advance();
-                let expr = self.expression()?;
-                self.consume(
-                    |t| t == &Token::Semicolon,
-                    |t: &TokenWithLocation| {
-                        format!(
-                            "Expected ';' after value to print, found {:?} instead.",
-                            t.token
-                        )
-                    },
-                )?;
-                Ok(Box::new(Stmt::Print(expr)))
-            }
-            Token::While => {
-                self.advance();
-                self.consume(
-                    |t| t == &Token::LeftParen,
-                    |t| format!("Expected '(' after 'while', found {:?}", t.token),
-                )?;
-                let condition = self.expression()?;
-                self.consume(
-                    |t| t == &Token::RightParen,
-                    |t| format!("Expected ')' after while condition, found {:?}", t.token),
-                )?;
-                let body = self.statement()?;
-                Ok(Box::new(Stmt::While { condition, body }))
-            }
+            Token::If => self.if_stmt(),
+            Token::Print => self.print_stmt(),
+            Token::While => self.while_stmt(),
             Token::LeftBrace => {
                 self.advance();
                 Ok(Box::new(Stmt::Block(self.block()?)))
             }
-            _ => {
-                let expr = self.expression()?;
-                self.consume(
-                    |t| t == &Token::Semicolon,
-                    |t: &TokenWithLocation| {
-                        format!(
-                            "Expected ';' after expression, found {:?} instead.",
-                            t.token
-                        )
-                    },
-                )?;
-                Ok(Box::new(Stmt::Expression(expr)))
-            }
+            _ => self.expression_stmt(),
         }
+    }
+
+    fn print_stmt(&mut self) -> Result<Box<Stmt>, ParseError> {
+        self.advance();
+        let expr = self.expression()?;
+        self.consume(
+            |t| t == &Token::Semicolon,
+            |t: &TokenWithLocation| {
+                format!(
+                    "Expected ';' after value to print, found {:?} instead.",
+                    t.token
+                )
+            },
+        )?;
+        Ok(Box::new(Stmt::Print(expr)))
+    }
+
+    fn while_stmt(&mut self) -> Result<Box<Stmt>, ParseError> {
+        self.advance();
+        self.consume(
+            |t| t == &Token::LeftParen,
+            |t| format!("Expected '(' after 'while', found {:?}", t.token),
+        )?;
+        let condition = self.expression()?;
+        self.consume(
+            |t| t == &Token::RightParen,
+            |t| format!("Expected ')' after while condition, found {:?}", t.token),
+        )?;
+        let body = self.statement()?;
+        Ok(Box::new(Stmt::While { condition, body }))
+    }
+
+    fn if_stmt(&mut self) -> Result<Box<Stmt>, ParseError> {
+        self.advance();
+        self.consume(
+            |t| t == &Token::LeftParen,
+            |t| format!("Expected '(' after 'if', found {:?}", t.token),
+        )?;
+        let condition = self.expression()?;
+        self.consume(
+            |t| t == &Token::RightParen,
+            |t| format!("Expected ')' after if condition, found {:?}", t.token),
+        )?;
+        let then_branch = self.statement()?;
+        let else_branch = match self.peek().token {
+            Token::Else => {
+                self.advance();
+                Some(self.statement()?)
+            }
+            _ => None,
+        };
+        Ok(Box::new(Stmt::If {
+            condition,
+            then_branch,
+            else_branch,
+        }))
+    }
+
+    fn expression_stmt(&mut self) -> Result<Box<Stmt>, ParseError> {
+        let expr = self.expression()?;
+        self.consume(
+            |t| t == &Token::Semicolon,
+            |t: &TokenWithLocation| {
+                format!(
+                    "Expected ';' after expression, found {:?} instead.",
+                    t.token
+                )
+            },
+        )?;
+        Ok(Box::new(Stmt::Expression(expr)))
     }
 
     fn block(&mut self) -> Result<Vec<Box<Stmt>>, ParseError> {

@@ -1,0 +1,5 @@
+print -1;     // out: -1
+print !true;  // out: false
+print !false; // out: true
+print !"";    // out: false
+print !!1;    // out: true

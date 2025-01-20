@@ -1,0 +1,8 @@
+print "スモークサーモン"; // out: スモークサーモン
+print "test"; // out: test
+print "multi-
+line
+string";
+// out: multi-
+// out: line
+// out: string

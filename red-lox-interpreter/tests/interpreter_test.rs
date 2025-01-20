@@ -10,7 +10,7 @@ use std::fs::File;
 use std::io::Read;
 
 #[rstest]
-fn test_lox_interpreter(#[files("tests/lox/**/*.lox")] path: PathBuf) {
+fn test_lox_interpreter(#[files("../tests/lox/**/*.lox")] path: PathBuf) {
     let mut content = String::new();
     {
         let mut lox_file = File::open(path).unwrap();

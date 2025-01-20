@@ -2,3 +2,11 @@ var a = 1 + 2;
 var b = "foo" + a;
 print a; // out: 3
 print b; // out: foo3
+a = 123 + b;
+print a; // out: 123foo3
+a = (b = 5) + 3;
+print a; // out: 8
+print b; // out: 5
+a = b = "foo";
+print a; // out: foo
+print b; // out: foo

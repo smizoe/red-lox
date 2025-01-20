@@ -16,7 +16,7 @@ pub enum Value {
 }
 
 impl Value {
-    fn is_truthy(&self) -> bool {
+    pub fn is_truthy(&self) -> bool {
         match self {
             Value::Nil => false,
             Value::Bool(b) => *b,
@@ -24,7 +24,7 @@ impl Value {
         }
     }
 
-    fn to_string(&self) -> String {
+    pub fn to_string(&self) -> String {
         use Value::*;
         match self {
             Nil => std::string::String::new(),
@@ -34,7 +34,7 @@ impl Value {
         }
     }
 
-    fn to_type_str(&self) -> &'static str {
+    pub fn to_type_str(&self) -> &'static str {
         use Value::*;
         match self {
             Nil => "Nil",

@@ -22,6 +22,23 @@ pub enum Error {
 impl<'a, 'b> Evaluator<Result<Action, Error>> for Interpreter<'a, 'b> {
     fn evaluate_stmt(&mut self, stmt: &Stmt) -> Result<Action, Error> {
         match stmt {
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                if self
+                    .evaluate_expr(&condition)
+                    .map_err(Error::ExprEvalError)?
+                    .is_truthy()
+                {
+                    self.evaluate_stmt(then_branch)
+                } else if let Some(stmt) = else_branch {
+                    self.evaluate_stmt(stmt)
+                } else {
+                    Ok(Action::Eval(Value::Nil))
+                }
+            }
             Stmt::Print(e) => match self.evaluate_expr(e) {
                 Ok(v) => Ok(Action::Print(v)),
                 Err(e) => Err(Error::ExprEvalError(e)),

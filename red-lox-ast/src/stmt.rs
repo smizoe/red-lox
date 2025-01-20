@@ -5,6 +5,11 @@ pub enum Stmt {
     Print(Box<Expr>),
     Var(Token, Option<Box<Expr>>),
     Block(Vec<Box<Stmt>>),
+    If {
+        condition: Box<Expr>,
+        then_branch: Box<Stmt>,
+        else_branch: Option<Box<Stmt>>,
+    },
 }
 
 pub trait Evaluator<R> {

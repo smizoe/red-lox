@@ -109,6 +109,31 @@ impl Parser {
 
     fn statement(&mut self) -> Result<Box<Stmt>, ParseError> {
         match self.peek().token {
+            Token::If => {
+                self.advance();
+                self.consume(
+                    |t| t == &Token::LeftParen,
+                    |t| format!("Expected '(' after 'if', found {:?}", t.token),
+                )?;
+                let condition = self.expression()?;
+                self.consume(
+                    |t| t == &Token::RightParen,
+                    |t| format!("Expected ')' after if condition, found {:?}", t.token),
+                )?;
+                let then_branch = self.statement()?;
+                let else_branch = match self.peek().token {
+                    Token::Else => {
+                        self.advance();
+                        Some(self.statement()?)
+                    }
+                    _ => None,
+                };
+                Ok(Box::new(Stmt::If {
+                    condition,
+                    then_branch,
+                    else_branch,
+                }))
+            }
             Token::Print => {
                 self.advance();
                 let expr = self.expression()?;

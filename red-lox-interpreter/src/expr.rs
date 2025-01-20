@@ -34,7 +34,7 @@ impl Value {
         }
     }
 
-    fn to_type_str(&self) -> &'static str{
+    fn to_type_str(&self) -> &'static str {
         use Value::*;
         match self {
             Nil => "Nil",
@@ -59,13 +59,13 @@ impl Display for Value {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("{} Operand of {:?} is expected be of type {expected_type} but {actual_result:?} is passed", .operator.location, .operator.token)]
+    #[error("{} Operand of unary operator {:?} is expected be of type {expected_type} but {} is passed", .operator.location, .operator.token, .actual_result.to_type_str())]
     InvalidUnaryOpOperandError {
         actual_result: Value,
         expected_type: String,
         operator: TokenWithLocation,
     },
-    #[error("{} Operands of operator {:?} {description}, but the following were passed:\n    lhs: {}\n    rhs: {}", .operator.location, .operator.token, .lhs.to_type_str(), .rhs.to_type_str())]
+    #[error("{} Operands of binary operator {:?} {description}, but the following were passed:\n    lhs: {}\n    rhs: {}", .operator.location, .operator.token, .lhs.to_type_str(), .rhs.to_type_str())]
     InvalidBinaryOpOperandError {
         description: String,
         lhs: Value,

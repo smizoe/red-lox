@@ -1,0 +1,4 @@
+- true;
+// err: Failed to evaluate the expression of the statement: [at column 1 in line 1] Operand of unary operator Minus is expected be of type Number but Bool is passed
+- "foo";
+// err: Failed to evaluate the expression of the statement: [at column 1 in line 3] Operand of unary operator Minus is expected be of type Number but String is passed

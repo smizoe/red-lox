@@ -1,0 +1,3 @@
+print true ? false ? 1 : 2 : 3; // out: 2
+print false ? "foo" : false ? 1 : 2; // out: 2
+print false ? "foo" : true ? "bar" : 2; // out: bar

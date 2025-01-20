@@ -30,8 +30,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
             match self.execute(stmt) {
                 Ok(()) => (),
                 Err(e) => {
-                    writeln!(self.out, "A runtime error occurred:\n{}", e)
-                        .expect("failed to write to Interpreter's out");
+                    writeln!(self.err, "{}", e).expect("failed to write to Interpreter's out");
                 }
             }
         }

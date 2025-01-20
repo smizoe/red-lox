@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use red_lox_ast::{
     expr::{Evaluator, Expr},
-    scanner::{Token, TokenWithLocation},
+    scanner::{Location, Token, TokenWithLocation},
 };
 
 use crate::Interpreter;
@@ -62,8 +62,10 @@ pub enum Error {
         rhs: Value,
         operator: TokenWithLocation,
     },
-    #[error("{} Undefined variable {:?} found", .0.location, .0.token)]
+    #[error("{} Undefined variable {:?} found.", .0.location, .0.token)]
     UndefinedVariableError(TokenWithLocation),
+    #[error("{} Division by zero occurred.", .0)]
+    DivisionByZeroError(Location),
 }
 
 fn handle_binary_op(
@@ -89,7 +91,12 @@ fn handle_binary_op(
             operator: operator.clone(),
         }),
         (Value::Number(l), Value::Number(r), Token::Minus) => Ok(Value::Number(l - r)),
-        (Value::Number(l), Value::Number(r), Token::Slash) => Ok(Value::Number(l / r)),
+        (Value::Number(l), Value::Number(r), Token::Slash) => {
+            if r == 0.0 {
+                return Err(Error::DivisionByZeroError(operator.location.clone()));
+            }
+            Ok(Value::Number(l / r))
+        }
         (Value::Number(l), Value::Number(r), Token::Star) => Ok(Value::Number(l * r)),
         (Value::Number(l), Value::Number(r), Token::Greater) => Ok(Value::Bool(l > r)),
         (Value::Number(l), Value::Number(r), Token::GreaterEqual) => Ok(Value::Bool(l >= r)),

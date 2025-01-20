@@ -1,0 +1,3 @@
+1 / 0; // err: Failed to evaluate the expression of the statement: [at column 3 in line 1] Division by zero occurred.
+var a = 123;
+a / (1 - 1); // err: Failed to evaluate the expression of the statement: [at column 3 in line 3] Division by zero occurred.

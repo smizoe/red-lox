@@ -41,7 +41,6 @@ fn test_lox_interpreter(#[files("../tests/lox/**/*.lox")] path: PathBuf) {
     let err_lines = String::from_utf8(err.into_inner())
         .unwrap()
         .lines()
-        .skip(1) // skip the line that says "one more errors occurred:"
         .map(str::to_string)
         .collect::<Vec<String>>();
     assert_eq!(err_lines, expected_output.stderr);

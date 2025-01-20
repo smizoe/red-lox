@@ -23,6 +23,16 @@ impl Value {
             Value::Number(_) | Value::String(_) => true,
         }
     }
+
+    fn to_string(&self) -> String {
+        use Value::*;
+        match self {
+            Nil => std::string::String::new(),
+            String(s) => s.clone(),
+            Number(v) => v.to_string(),
+            Bool(b) => b.to_string(),
+        }
+    }
 }
 
 impl Display for Value {
@@ -63,8 +73,13 @@ fn handle_binary_op(
 ) -> Result<Value, Error> {
     match (left_expr, right_expr, &operator.token) {
         (Value::Number(l), Value::Number(r), Token::Plus) => Ok(Value::Number(l + r)),
-        (Value::String(mut l), Value::String(r), Token::Plus) => {
-            l.push_str(&r);
+        (Value::String(mut l), r, Token::Plus) => {
+            l.push_str(&r.to_string());
+            Ok(Value::String(l))
+        }
+        (l, Value::String(r), Token::Plus) => {
+            let mut l = l.to_string();
+            l.push_str(&r.to_string());
             Ok(Value::String(l))
         }
         (lhs, rhs, Token::Plus) => Err(Error::InvalidBinaryOpOperandError {

@@ -3,3 +3,10 @@ print 1 - 2; // out: -1
 print 4 / 2; // out: 2
 print 3 * 5; // out: 15
 print "a" + "b"; // out: ab
+print "a" + 3; // out: a3
+print "a" + nil; // out: a
+print "a" + true; // out: atrue
+print 3    + "b"; // out: 3b
+print nil  + "b"; // out: b
+print false + "b"; // out: falseb
+print "a", 3; // out: 3

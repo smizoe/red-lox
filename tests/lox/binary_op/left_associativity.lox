@@ -1,8 +1,5 @@
-var a = 1 - 2 - 3;
-print a; // out: -4
-var b = 6 / 3 / 2;
-print b; // out: 1
-var c = 1 + 2 + 3;
-print c; // out: 6
-var d = 2 * 3 * 4;
-print d; // out: 24
+print 1 - 2 - 3; // out: -4
+print 6 / 3 / 2; // out: 1
+print 1 + 2 + 3; // out: 6
+print 2 * 3 * 4; // out: 24
+print 2, 3+4, 5; // out: 5

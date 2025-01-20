@@ -13,6 +13,11 @@ pub enum Expr {
         operator: TokenWithLocation,
         right: Box<Expr>,
     },
+    Logical {
+        left: Box<Expr>,
+        operator: TokenWithLocation,
+        right: Box<Expr>,
+    },
     Grouping(Box<Expr>, Location),
     LiteralNumber(f64, Location),
     LiteralString(String, Location),

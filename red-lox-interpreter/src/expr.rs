@@ -156,6 +156,27 @@ impl<'a, 'b> Evaluator<Result<Value, Error>> for Interpreter<'a, 'b> {
                 let re: Value = self.evaluate_expr(right)?;
                 handle_binary_op(le, re, operator)
             }
+            Logical {
+                left,
+                operator,
+                right,
+            } => match operator.token {
+                Token::Or => {
+                    if self.evaluate_expr(left)?.is_truthy() {
+                        Ok(Value::Bool(true))
+                    } else {
+                        Ok(Value::Bool(self.evaluate_expr(&right)?.is_truthy()))
+                    }
+                }
+                Token::And => {
+                    if !self.evaluate_expr(left)?.is_truthy() {
+                        Ok(Value::Bool(false))
+                    } else {
+                        Ok(Value::Bool(self.evaluate_expr(&right)?.is_truthy()))
+                    }
+                }
+                _ => unreachable!(),
+            },
             Ternary { cond, left, right } => {
                 let c = self.evaluate_expr(cond)?;
                 if c.is_truthy() {

@@ -197,7 +197,7 @@ impl Parser {
     }
 
     fn assignment(&mut self) -> Result<Box<Expr>, ParseError> {
-        let expr = self.equality()?;
+        let expr = self.or()?;
         match self.peek().token {
             Token::Equal => {
                 let equals = self.advance().clone();
@@ -240,6 +240,35 @@ impl Parser {
     define_parsing_rule! {comparison, term, Greater | GreaterEqual | Less | LessEqual}
     define_parsing_rule! {term, factor, Minus | Plus}
     define_parsing_rule! {factor, unary, Slash | Star}
+
+    fn or(&mut self) -> Result<Box<Expr>, ParseError> {
+        let mut expr = self.and()?;
+
+        while self.peek().token == Token::Or {
+            let token = self.advance().clone();
+            let right = self.and()?;
+            expr = Box::new(Expr::Logical {
+                left: expr,
+                operator: token,
+                right,
+            });
+        }
+        Ok(expr)
+    }
+
+    fn and(&mut self) -> Result<Box<Expr>, ParseError> {
+        let mut expr = self.equality()?;
+        while self.peek().token == Token::And {
+            let token = self.advance().clone();
+            let right = self.and()?;
+            expr = Box::new(Expr::Logical {
+                left: expr,
+                operator: token,
+                right,
+            });
+        }
+        Ok(expr)
+    }
 
     fn unary(&mut self) -> Result<Box<Expr>, ParseError> {
         use Token::*;

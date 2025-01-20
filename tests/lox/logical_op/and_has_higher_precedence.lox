@@ -1,0 +1,14 @@
+print true or true and false; // out: true
+print false and true or true; // out: true
+// 1. a or (b and c)
+// 2. (a or b) and c
+// a | b | c | 1 | 2
+// -----------------
+// 0 | 0 | 0 | 0 | 0
+// 0 | 0 | 1 | 0 | 0
+// 0 | 1 | 0 | 0 | 0
+// 0 | 1 | 1 | 1 | 1
+// 1 | 0 | 0 | 1 | 0 <= diff
+// 1 | 0 | 1 | 1 | 1
+// 1 | 1 | 0 | 1 | 0 <= diff
+// 1 | 1 | 1 | 1 | 1

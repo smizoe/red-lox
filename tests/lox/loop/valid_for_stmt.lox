@@ -1,0 +1,34 @@
+var c = 0;
+for (var i = 0; i < 10; i = i+1) {
+    c = c + 1;
+}
+print c; // out: 10
+var i = 0;
+c = 0;
+for (; i < 5; i = i + 2) {
+    c = c + 1;
+}
+print c; // out: 3
+i = 0;
+c = 0;
+for (;i < 5; ) {
+   i = i + 2;
+   c = c + 1;
+}
+print c; // out: 3
+for (var i = 0; i < 5; i = i+1) {
+    if (i == 3) {
+        print i; // out: 3
+        break;
+    }
+}
+var a = 0;
+for (;;) {
+    if (a == 3) {
+        print "break!"; // out: break!
+        break;
+    }
+    a = a + 1;
+}
+print a; // out: 3
+for (;;) break;

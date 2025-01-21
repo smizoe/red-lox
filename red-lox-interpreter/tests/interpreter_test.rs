@@ -1,8 +1,7 @@
+use std::path::Path;
 use std::{io::Cursor, path::PathBuf};
 
 use lazy_static::lazy_static;
-use red_lox_ast::parser::Parser;
-use red_lox_ast::scanner::Scanner;
 use red_lox_interpreter::Interpreter;
 use regex::Regex;
 use rstest::rstest;
@@ -11,37 +10,14 @@ use std::io::Read;
 
 #[rstest]
 fn test_lox_interpreter(#[files("../tests/lox/**/*.lox")] path: PathBuf) {
-    let mut content = String::new();
-    {
-        let mut lox_file = File::open(path).unwrap();
-        lox_file
-            .read_to_string(&mut content)
-            .expect("failed to read file.");
-    }
-    let mut scanner = Scanner::new(&content);
-    let scan_result = scanner.scan_tokens();
-    assert_eq!(
-        scan_result.errors.len(),
-        0,
-        "ScanResult contains some errors: {:?}",
-        scan_result.errors
-    );
-
-    let mut parser = Parser::new(scan_result.tokens);
-    let parse_result = parser.parse();
-    assert_eq!(
-        parse_result.errors.len(),
-        0,
-        "ParseResult contains some errors: {:?}",
-        parse_result.errors
-    );
+    use red_lox_interpreter::command::run_file;
 
     let mut out = Cursor::new(Vec::new());
     let mut err = Cursor::new(Vec::new());
     let mut interpreter = Interpreter::new(&mut out, &mut err);
-    interpreter.interpret(&parse_result.stmts);
+    let _ = run_file(&path, &mut interpreter);
 
-    let expected_output = ExpectedOutput::new(&content);
+    let expected_output = ExpectedOutput::new(&path);
     let out_lines = String::from_utf8(out.into_inner())
         .unwrap()
         .lines()
@@ -68,9 +44,16 @@ struct ExpectedOutput {
 }
 
 impl ExpectedOutput {
-    fn new(lox_content: &str) -> Self {
+    fn new(path: &Path) -> Self {
+        let mut content = String::new();
+        {
+            let mut lox_file = File::open(path).unwrap();
+            lox_file
+                .read_to_string(&mut content)
+                .expect("failed to read file.");
+        }
         let mut result = Self::default();
-        for line in lox_content.lines() {
+        for line in content.lines() {
             if let Some(captures) = EXPECTATION_RE.captures(line) {
                 let to_push = match captures.get(1).unwrap().as_str() {
                     "out" => Some(&mut result.stdout),

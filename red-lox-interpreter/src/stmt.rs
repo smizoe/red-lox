@@ -11,6 +11,7 @@ pub enum Action {
     Print(Value),
     Eval(Value),
     Define(Token, Value),
+    Break,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -49,7 +50,10 @@ impl<'a, 'b> Evaluator<Result<Action, Error>> for Interpreter<'a, 'b> {
                     .map_err(Error::ExprEvalError)?
                     .is_truthy()
                 {
-                    self.evaluate_stmt(body)?;
+                    match self.evaluate_stmt(body)? {
+                        Action::Break => break,
+                        _ => (),
+                    }
                 }
                 Ok(Action::Eval(Value::Nil))
             }
@@ -66,13 +70,16 @@ impl<'a, 'b> Evaluator<Result<Action, Error>> for Interpreter<'a, 'b> {
             },
             Stmt::Block(stmts) => {
                 let guard = self.enter();
+                let mut action = Action::Eval(Value::Nil);
                 for stmt in stmts {
-                    if let Err(e) = guard.interpreter.execute(&stmt) {
-                        return Err(e);
+                    if guard.interpreter.execute(&stmt)? {
+                        action = Action::Break;
+                        break;
                     }
                 }
-                Ok(Action::Eval(Value::Nil))
+                Ok(action)
             }
+            Stmt::Break => Ok(Action::Break),
         }
     }
 }

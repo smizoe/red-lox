@@ -14,6 +14,7 @@ pub enum Stmt {
         condition: Box<Expr>,
         body: Box<Stmt>,
     },
+    Break,
 }
 
 pub trait Evaluator<R> {

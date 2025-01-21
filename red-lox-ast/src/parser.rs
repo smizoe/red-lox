@@ -36,9 +36,20 @@ macro_rules! define_parsing_rule {
     };
 }
 
+struct NestGuard<'a> {
+    parser: &'a mut Parser,
+}
+
+impl<'a> Drop for NestGuard<'a> {
+    fn drop(&mut self) {
+        self.parser.nest_level -= 1;
+    }
+}
+
 pub struct Parser {
     tokens: Vec<TokenWithLocation>,
     current: usize,
+    nest_level: usize,
 }
 
 #[derive(Default)]
@@ -49,7 +60,11 @@ pub struct ParseResult {
 
 impl Parser {
     pub fn new(tokens: Vec<TokenWithLocation>) -> Self {
-        Self { tokens, current: 0 }
+        Self {
+            tokens,
+            current: 0,
+            nest_level: 0,
+        }
     }
 
     pub fn parse(&mut self) -> ParseResult {
@@ -61,6 +76,11 @@ impl Parser {
             }
         }
         result
+    }
+
+    fn nest(&mut self) -> NestGuard<'_> {
+        self.nest_level += 1;
+        NestGuard { parser: self }
     }
 
     fn declaration(&mut self) -> Result<Box<Stmt>, ParseError> {
@@ -111,11 +131,37 @@ impl Parser {
         match self.peek().token {
             Token::If => self.if_stmt(),
             Token::Print => self.print_stmt(),
-            Token::While => self.while_stmt(),
-            Token::For => self.for_stmt(),
+            Token::While => {
+                let guard = self.nest();
+                guard.parser.while_stmt()
+            }
+            Token::For => {
+                let guard = self.nest();
+                guard.parser.for_stmt()
+            }
             Token::LeftBrace => {
                 self.advance();
                 Ok(Box::new(Stmt::Block(self.block()?)))
+            }
+            Token::Break => {
+                let token = self.advance().clone();
+                if self.nest_level > 0 {
+                    self.consume(
+                        |t| t == &Token::Semicolon,
+                        |t: &TokenWithLocation| {
+                            format!(
+                                "Expected ';' after expression, found {:?} instead.",
+                                t.token
+                            )
+                        },
+                    )?;
+                    Ok(Box::new(Stmt::Break))
+                } else {
+                    Err(ParseError {
+                        msg: "Keyword 'break' encountered without a enclosing loop.".to_string(),
+                        location: token.location,
+                    })
+                }
             }
             _ => self.expression_stmt(),
         }

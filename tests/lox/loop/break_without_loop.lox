@@ -1,0 +1,10 @@
+// err: One or more errors occurred during parsing the expression:
+break; // err: [at column 1 in line 2] ParseError: Keyword 'break' encountered without a enclosing loop.
+if ( true ) {
+    break; // err: [at column 5 in line 4] ParseError: Keyword 'break' encountered without a enclosing loop.
+}
+if (true) {
+    1;
+} else {
+    break; // err: [at column 5 in line 9] ParseError: Keyword 'break' encountered without a enclosing loop.
+}

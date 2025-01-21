@@ -23,6 +23,7 @@ const KEYWORDS: phf::Map<&'static [u8], Token> = phf_map! {
     b"true" => Token::True,
     b"var" => Token::Var,
     b"while" => Token::While,
+    b"break" => Token::Break,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -58,6 +59,7 @@ pub enum Token {
 
     // Keywords.
     And,
+    Break,
     Class,
     Else,
     False,

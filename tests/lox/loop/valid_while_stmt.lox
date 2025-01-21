@@ -1,0 +1,15 @@
+var a = 0;
+while (a < 10) {
+    a = a + 1;
+}
+print a; // out: 10
+a = 0;
+while (true) {
+    if (a == 3) {
+        print "break!"; // out: break!
+        break;
+    }
+    a = a + 1;
+}
+print a; // out: 3
+while (true) break;

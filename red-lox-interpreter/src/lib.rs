@@ -38,7 +38,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
     pub fn interpret(&mut self, stmts: &Vec<Box<Stmt>>) {
         for stmt in stmts.iter() {
             match self.execute(stmt) {
-                Ok(()) => (),
+                Ok(_) => (),
                 Err(e) => {
                     writeln!(self.err, "{}", e).expect("failed to write to Interpreter's out");
                 }
@@ -51,13 +51,12 @@ impl<'a, 'b> Interpreter<'a, 'b> {
         EnvGuard { interpreter: self }
     }
 
-    fn execute(&mut self, stmt: &Stmt) -> Result<(), Error> {
-        let action = self.evaluate_stmt(stmt)?;
+    fn handle_side_effect(&mut self, action: Action) {
         match action {
             Action::Print(v) => {
                 writeln!(self.out, "{}", v).expect("failed to write to Interpreter's out");
             }
-            Action::Eval(_) => (),
+            Action::Eval(_) | Action::Break => (),
             Action::Define(t, v) => {
                 let name = match t {
                     Token::Identifier(n) => n,
@@ -66,7 +65,17 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                 self.environment.define(name, v);
             }
         }
-        Ok(())
+    }
+
+    // Returns true when the resulting Action was Action::Break.
+    fn execute(&mut self, stmt: &Stmt) -> Result<bool, Error> {
+        let action = self.evaluate_stmt(stmt)?;
+        let is_break = match action {
+            Action::Break => true,
+            _ => false,
+        };
+        self.handle_side_effect(action);
+        Ok(is_break)
     }
 }
 

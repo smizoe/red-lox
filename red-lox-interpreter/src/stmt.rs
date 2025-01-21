@@ -65,14 +65,12 @@ impl<'a, 'b> Evaluator<Result<Action, Error>> for Interpreter<'a, 'b> {
                 None => Ok(Action::Define(t.clone(), Value::Nil)),
             },
             Stmt::Block(stmts) => {
-                self.environment.enter();
+                let guard = self.enter();
                 for stmt in stmts {
-                    if let Err(e) = self.execute(&stmt) {
-                        self.environment.exit();
+                    if let Err(e) = guard.interpreter.execute(&stmt) {
                         return Err(e);
                     }
                 }
-                self.environment.exit();
                 Ok(Action::Eval(Value::Nil))
             }
         }

@@ -16,6 +16,16 @@ pub struct Interpreter<'a, 'b> {
     err: &'b mut dyn std::io::Write,
 }
 
+pub struct EnvGuard<'a, 'b, 'c> {
+    interpreter: &'a mut Interpreter<'b, 'c>,
+}
+
+impl<'a, 'b, 'c> Drop for EnvGuard<'a, 'b, 'c> {
+    fn drop(&mut self) {
+        self.interpreter.environment.exit();
+    }
+}
+
 impl<'a, 'b> Interpreter<'a, 'b> {
     pub fn new(out: &'a mut dyn std::io::Write, err: &'b mut dyn std::io::Write) -> Self {
         Self {
@@ -34,6 +44,11 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                 }
             }
         }
+    }
+
+    pub fn enter(&mut self) -> EnvGuard<'_, 'a, 'b> {
+        self.environment.enter();
+        EnvGuard { interpreter: self }
     }
 
     fn execute(&mut self, stmt: &Stmt) -> Result<(), Error> {

@@ -23,6 +23,7 @@ for (var i = 0; i < 5; i = i+1) {
     }
 }
 var a = 0;
+// break works.
 for (;;) {
     if (a == 3) {
         print "break!"; // out: break!
@@ -32,3 +33,12 @@ for (;;) {
 }
 print a; // out: 3
 for (;;) break;
+// only the inner-most loop is canceled.
+a = 0;
+for (var i = 0; i < 5; i = i+1 ) {
+    for (var j = 0; j < 5; j = j+1) {
+        break;
+    }
+    a = a + 1;
+}
+print a; // out: 5

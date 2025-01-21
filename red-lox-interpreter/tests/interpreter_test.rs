@@ -23,13 +23,21 @@ fn test_lox_interpreter(#[files("../tests/lox/**/*.lox")] path: PathBuf) {
         .lines()
         .map(str::to_string)
         .collect::<Vec<String>>();
-    assert_eq!(out_lines, expected_output.stdout);
     let err_lines = String::from_utf8(err.into_inner())
         .unwrap()
         .lines()
         .map(str::to_string)
         .collect::<Vec<String>>();
-    assert_eq!(err_lines, expected_output.stderr);
+    assert_eq!(
+        out_lines, expected_output.stdout,
+        "out_lines: {:?}\nerr_lines: {:?}",
+        out_lines, err_lines
+    );
+    assert_eq!(
+        err_lines, expected_output.stderr,
+        "out_lines: {:?}\nerr_lines: {:?}",
+        out_lines, err_lines
+    );
 }
 
 lazy_static! {

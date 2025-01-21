@@ -13,3 +13,12 @@ while (true) {
 }
 print a; // out: 3
 while (true) break;
+// only the inner-most loop is canceled.
+a = 0;
+while (a < 5) {
+    while (a < 3) {
+        break;
+    }
+    a = a + 1;
+}
+print a; // out: 5

@@ -155,10 +155,9 @@ impl Parser {
             _ => Some(self.expression_stmt()?),
         };
 
-        let condition = if self.peek().token != Token::Semicolon {
-            Some(self.expression()?)
-        } else {
-            None
+        let condition = match self.peek().token {
+            Token::Semicolon => Box::new(Expr::LiteralBool(true, self.peek().location.clone())),
+            _ => self.expression()?,
         };
 
         self.consume(
@@ -185,9 +184,7 @@ impl Parser {
             None => self.statement()?,
         };
 
-        if let Some(c) = condition {
-            body = Box::new(Stmt::While { condition: c, body });
-        }
+        body = Box::new(Stmt::While { condition, body });
 
         if let Some(i) = initializer {
             body = Box::new(Stmt::Block(vec![i, body]));

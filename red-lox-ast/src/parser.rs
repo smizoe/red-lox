@@ -112,6 +112,7 @@ impl Parser {
             Token::If => self.if_stmt(),
             Token::Print => self.print_stmt(),
             Token::While => self.while_stmt(),
+            Token::For => self.for_stmt(),
             Token::LeftBrace => {
                 self.advance();
                 Ok(Box::new(Stmt::Block(self.block()?)))
@@ -133,6 +134,66 @@ impl Parser {
             },
         )?;
         Ok(Box::new(Stmt::Print(expr)))
+    }
+
+    fn for_stmt(&mut self) -> Result<Box<Stmt>, ParseError> {
+        self.advance();
+        self.consume(
+            |t| t == &Token::LeftParen,
+            |t| format!("Expected '(' after 'for', found {:?}", t.token),
+        )?;
+
+        let initializer = match self.peek().token {
+            Token::Semicolon => {
+                self.advance();
+                None
+            }
+            Token::Var => {
+                self.advance();
+                Some(self.var_declaration()?)
+            }
+            _ => Some(self.expression_stmt()?),
+        };
+
+        let condition = if self.peek().token != Token::Semicolon {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.consume(
+            |t| t == &Token::Semicolon,
+            |t| format!("Expected ';' after loop condition, found {:?}", t.token),
+        )?;
+
+        let increment = if self.peek().token != Token::RightParen {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.consume(
+            |t| t == &Token::RightParen,
+            |t| format!("Expected ')' after for clauses, found {:?}", t.token),
+        )?;
+
+        let mut body = match increment {
+            Some(expr) => Box::new(Stmt::Block(vec![
+                self.statement()?,
+                Box::new(Stmt::Expression(expr)),
+            ])),
+            None => self.statement()?,
+        };
+
+        if let Some(c) = condition {
+            body = Box::new(Stmt::While { condition: c, body });
+        }
+
+        if let Some(i) = initializer {
+            body = Box::new(Stmt::Block(vec![i, body]));
+        }
+
+        Ok(body)
     }
 
     fn while_stmt(&mut self) -> Result<Box<Stmt>, ParseError> {

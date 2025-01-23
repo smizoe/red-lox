@@ -13,6 +13,11 @@ pub enum Expr {
         operator: TokenWithLocation,
         right: Box<Expr>,
     },
+    Call {
+        callee: Box<Expr>,
+        paren: TokenWithLocation,
+        arguments: Vec<Box<Expr>>,
+    },
     Logical {
         left: Box<Expr>,
         operator: TokenWithLocation,

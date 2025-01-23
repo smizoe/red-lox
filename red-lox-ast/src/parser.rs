@@ -1,3 +1,5 @@
+use std::fmt::format;
+
 use crate::{
     expr::Expr,
     scanner::{Location, Token, TokenWithLocation},
@@ -407,8 +409,51 @@ impl Parser {
                     right: right,
                 }))
             }
-            _ => self.primary(),
+            _ => self.call(),
         }
+    }
+
+    fn call(&mut self) -> Result<Box<Expr>, ParseError> {
+        let mut expr = self.primary()?;
+
+        loop {
+            match self.peek().token {
+                Token::LeftParen => {
+                    self.advance();
+                    expr = self.finish_call(expr)?;
+                }
+                _ => break,
+            }
+        }
+        expr
+    }
+
+    fn finish_call(&mut self, callee: Box<Expr>) -> Result<Box<Expr>, ParseError> {
+        let mut arguments = Vec::new();
+        if self.peek().token != Token::RightParen {
+            loop {
+                arguments.push(self.expression()?);
+                match self.peek().token {
+                    Token::Comma => {
+                        self.advance();
+                    }
+                    _ => break,
+                }
+            }
+        }
+
+        let paren = self
+            .consume(
+                |t| t == &Token::RightParen,
+                |t| format!("Expect ')' after arguments, found {:?}", t.token),
+            )?
+            .clone();
+
+        Ok(Box::new(Expr::Call {
+            callee,
+            paren,
+            arguments,
+        }))
     }
 
     fn primary(&mut self) -> Result<Box<Expr>, ParseError> {

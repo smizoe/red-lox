@@ -6,8 +6,8 @@ use crate::{expr, expr::Value};
 
 #[derive(Debug, Default)]
 pub struct Environment {
-    enclosing: Option<Rc<RefCell<Environment>>>,
-    values: HashMap<String, Value>,
+    enclosing: RefCell<Option<Rc<Environment>>>,
+    values: RefCell<HashMap<String, Value>>,
 }
 
 impl Environment {
@@ -15,18 +15,19 @@ impl Environment {
         Self::default()
     }
 
-    pub fn enter(&mut self) {
-        let mut other = Self::default();
+    pub fn enter(self: &mut Rc<Self>) {
+        let mut other = Rc::new(Self::default());
         std::mem::swap(self, &mut other);
-        self.enclosing.replace(Rc::new(RefCell::new(other)));
+        self.enclosing.borrow_mut().replace(other);
     }
 
-    pub fn get_enclosing(&self) -> Option<Rc<RefCell<Self>>> {
-        self.enclosing.clone()
+    pub fn exit(self: &mut Rc<Self>) {
+        let mut enclosing = self.enclosing.borrow().clone().unwrap();
+        std::mem::swap(self, &mut enclosing);
     }
 
-    pub fn define(&mut self, name: String, val: Value) -> Option<Value> {
-        self.values.insert(name, val)
+    pub fn define(&self, name: String, val: Value) -> Option<Value> {
+        self.values.borrow_mut().insert(name, val)
     }
 
     pub fn get(&self, token: &TokenWithLocation) -> Result<Value, expr::Error> {
@@ -39,14 +40,15 @@ impl Environment {
     }
 
     pub fn get_internal(&self, name: &str) -> Option<Value> {
-        self.values.get(name).cloned().or_else(|| {
+        self.values.borrow().get(name).cloned().or_else(|| {
             self.enclosing
+                .borrow()
                 .as_ref()
-                .and_then(|e| e.borrow().get_internal(name))
+                .and_then(|e| e.get_internal(name))
         })
     }
 
-    pub fn assign(&mut self, token: &TokenWithLocation, val: Value) -> Result<Value, expr::Error> {
+    pub fn assign(&self, token: &TokenWithLocation, val: Value) -> Result<Value, expr::Error> {
         let name = match &token.token {
             Token::Identifier(n) => n,
             _ => unreachable!(),
@@ -55,16 +57,17 @@ impl Environment {
             .ok_or(expr::Error::UndefinedVariableError(token.clone()))
     }
 
-    pub fn assign_internal(&mut self, name: &str, val: Value) -> Option<Value> {
-        match self.values.get_mut(name) {
+    pub fn assign_internal(&self, name: &str, val: Value) -> Option<Value> {
+        match self.values.borrow_mut().get_mut(name) {
             Some(v) => {
                 *v = val;
                 Some(v.clone())
             }
             None => self
                 .enclosing
-                .as_mut()
-                .and_then(|e| e.borrow_mut().assign_internal(name, val)),
+                .borrow()
+                .as_ref()
+                .and_then(|e| e.assign_internal(name, val)),
         }
     }
 }

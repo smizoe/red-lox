@@ -51,12 +51,12 @@ impl std::fmt::Debug for Value {
             Self::String(arg0) => f.debug_tuple("String").field(arg0).finish(),
             Self::Number(arg0) => f.debug_tuple("Number").field(arg0).finish(),
             Self::Bool(arg0) => f.debug_tuple("Bool").field(arg0).finish(),
-            Self::NativeFn { name, fun } => f
+            Self::NativeFn { name, .. } => f
                 .debug_struct("NativeFn")
                 .field("name", name)
                 .field("fun", &format_args!("_native_fn_"))
                 .finish(),
-            Self::Function { name, body, arity } => f
+            Self::Function { name, arity, .. } => f
                 .debug_struct("Function")
                 .field("name", name)
                 .field("body", &format_args!("_function_body_"))
@@ -267,10 +267,10 @@ impl<'a, 'b> Evaluator<Result<Value, Error>> for Interpreter<'a, 'b> {
                     ),
                 }
             }
-            Variable(t) => self.environment.borrow().get(t),
+            Variable(t) => self.environment.get(t),
             Assign { name, expr } => {
                 let value = self.evaluate_expr(&expr)?;
-                self.environment.borrow_mut().assign(name, value)
+                self.environment.assign(name, value)
             }
             ExprSeries(exprs) => {
                 let mut last_value = self.evaluate_expr(&exprs[0])?;

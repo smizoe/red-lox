@@ -3,7 +3,7 @@ mod environment;
 mod expr;
 mod stmt;
 
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 use crate::stmt::{Action, Error};
 use environment::Environment;
@@ -14,8 +14,8 @@ use red_lox_ast::{
 };
 
 pub struct Interpreter<'a, 'b> {
-    global: Rc<RefCell<Environment>>,
-    environment: Rc<RefCell<Environment>>,
+    global: Rc<Environment>,
+    environment: Rc<Environment>,
     out: &'a mut dyn std::io::Write,
     err: &'b mut dyn std::io::Write,
 }
@@ -26,13 +26,7 @@ pub struct EnvGuard<'a, 'b, 'c> {
 
 impl<'a, 'b, 'c> Drop for EnvGuard<'a, 'b, 'c> {
     fn drop(&mut self) {
-        let enclosing = self
-            .interpreter
-            .environment
-            .borrow()
-            .get_enclosing()
-            .unwrap();
-        self.interpreter.environment = enclosing
+        self.interpreter.environment.exit();
     }
 }
 
@@ -40,8 +34,8 @@ impl<'a, 'b> Interpreter<'a, 'b> {
     pub fn new(out: &'a mut dyn std::io::Write, err: &'b mut dyn std::io::Write) -> Self {
         let mut global = Environment::default();
         Self {
-            global: Rc::new(RefCell::new(global)),
-            environment: Rc::new(RefCell::new(Environment::default())),
+            global: Rc::new(global),
+            environment: Rc::new(Environment::default()),
             out,
             err,
         }
@@ -59,7 +53,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
     }
 
     pub fn enter(&mut self) -> EnvGuard<'_, 'a, 'b> {
-        self.environment.borrow_mut().enter();
+        self.environment.enter();
         EnvGuard { interpreter: self }
     }
 
@@ -74,7 +68,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                     Token::Identifier(n) => n,
                     _ => unreachable!(),
                 };
-                self.environment.borrow_mut().define(name, v);
+                self.environment.define(name, v);
             }
         }
     }

@@ -1,18 +1,69 @@
-use std::fmt::Display;
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use red_lox_ast::{
     expr::{Evaluator, Expr},
     scanner::{Location, Token, TokenWithLocation},
+    stmt::Stmt,
 };
 
-use crate::Interpreter;
+use crate::{stmt, Interpreter};
 
-#[derive(Debug, Clone, PartialEq)]
+// Value has to implement Clone to return the value of Value when it is assigned to a variable.
+#[derive(Clone)]
 pub enum Value {
     Nil,
     String(String),
     Number(f64),
     Bool(bool),
+    NativeFn {
+        name: String,
+        fun: Rc<RefCell<dyn FnMut(Vec<Value>) -> Result<Value, Error>>>,
+    },
+    Function {
+        name: String,
+        // body is Rc<..> to make this clonable.
+        body: Rc<Vec<Box<Stmt>>>,
+        arity: usize,
+    },
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::String(l0), Self::String(r0)) => l0 == r0,
+            (Self::Number(l0), Self::Number(r0)) => l0 == r0,
+            (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
+            (Self::NativeFn { name: l_name, .. }, Self::NativeFn { name: r_name, .. }) => {
+                l_name == r_name
+            }
+            (Self::Function { name: l_name, .. }, Self::Function { name: r_name, .. }) => {
+                l_name == r_name
+            }
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
+}
+
+impl std::fmt::Debug for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Nil => write!(f, "Nil"),
+            Self::String(arg0) => f.debug_tuple("String").field(arg0).finish(),
+            Self::Number(arg0) => f.debug_tuple("Number").field(arg0).finish(),
+            Self::Bool(arg0) => f.debug_tuple("Bool").field(arg0).finish(),
+            Self::NativeFn { name, fun } => f
+                .debug_struct("NativeFn")
+                .field("name", name)
+                .field("fun", &format_args!("_native_fn_"))
+                .finish(),
+            Self::Function { name, body, arity } => f
+                .debug_struct("Function")
+                .field("name", name)
+                .field("body", &format_args!("_function_body_"))
+                .field("arity", arity)
+                .finish(),
+        }
+    }
 }
 
 impl Value {
@@ -21,6 +72,7 @@ impl Value {
             Value::Nil => false,
             Value::Bool(b) => *b,
             Value::Number(_) | Value::String(_) => true,
+            Value::NativeFn { .. } | Value::Function { .. } => true,
         }
     }
 
@@ -31,6 +83,8 @@ impl Value {
             String(s) => s.clone(),
             Number(v) => v.to_string(),
             Bool(b) => b.to_string(),
+            NativeFn { .. } => "<native fn>".to_string(),
+            Function { name, .. } => format!("<fn {}>", name),
         }
     }
 
@@ -41,6 +95,8 @@ impl Value {
             String(_) => "String",
             Number(_) => "Number",
             Bool(_) => "Bool",
+            NativeFn { .. } => "NativeFn",
+            Function { .. } => "Function",
         }
     }
 }
@@ -53,6 +109,7 @@ impl Display for Value {
             String(s) => write!(f, "{}", s),
             Number(v) => write!(f, "{}", v),
             Bool(b) => write!(f, "{}", b),
+            _ => write!(f, "{}", self.to_string()),
         }
     }
 }
@@ -76,6 +133,15 @@ pub enum Error {
     UndefinedVariableError(TokenWithLocation),
     #[error("{} Division by zero occurred.", .0)]
     DivisionByZeroError(Location),
+    #[error("{location} Expected {arity} arguments for {name} but got {num_arguments}.")]
+    ArityMismatchError {
+        name: String,
+        arity: usize,
+        num_arguments: usize,
+        location: Location,
+    },
+    #[error("{} Can only call functions and classes.", .0)]
+    InvalidCalleeError(Location),
 }
 
 fn handle_binary_op(
@@ -201,10 +267,10 @@ impl<'a, 'b> Evaluator<Result<Value, Error>> for Interpreter<'a, 'b> {
                     ),
                 }
             }
-            Variable(t) => self.environment.get(t),
+            Variable(t) => self.environment.borrow().get(t),
             Assign { name, expr } => {
                 let value = self.evaluate_expr(&expr)?;
-                self.environment.assign(name, value)
+                self.environment.borrow_mut().assign(name, value)
             }
             ExprSeries(exprs) => {
                 let mut last_value = self.evaluate_expr(&exprs[0])?;
@@ -212,6 +278,36 @@ impl<'a, 'b> Evaluator<Result<Value, Error>> for Interpreter<'a, 'b> {
                     last_value = self.evaluate_expr(&expr)?;
                 }
                 Ok(last_value)
+            }
+            Call {
+                callee,
+                paren,
+                arguments,
+            } => {
+                let callee = self.evaluate_expr(callee)?;
+                let mut args = Vec::with_capacity(arguments.len());
+                for arg in arguments {
+                    args.push(self.evaluate_expr(&arg)?);
+                }
+                match callee {
+                    Value::NativeFn { name: _name, fun } => fun.borrow_mut()(args),
+                    Value::Function { name, body, arity } => {
+                        if arguments.len() != arity {
+                            return Err(Error::ArityMismatchError {
+                                name,
+                                arity,
+                                num_arguments: arguments.len(),
+                                location: paren.location.clone(),
+                            });
+                        }
+                        self.execute_block(&body)
+                            .map_err(|e| match e {
+                                stmt::Error::ExprEvalError(e) => e,
+                            })
+                            .map(|_| Value::Nil)
+                    }
+                    _ => Err(Error::InvalidCalleeError(paren.location.clone())),
+                }
             }
         }
     }

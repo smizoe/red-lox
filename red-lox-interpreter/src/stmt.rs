@@ -68,17 +68,7 @@ impl<'a, 'b> Evaluator<Result<Action, Error>> for Interpreter<'a, 'b> {
                 },
                 None => Ok(Action::Define(t.clone(), Value::Nil)),
             },
-            Stmt::Block(stmts) => {
-                let guard = self.enter();
-                let mut action = Action::Eval(Value::Nil);
-                for stmt in stmts {
-                    if guard.interpreter.execute(&stmt)? {
-                        action = Action::Break;
-                        break;
-                    }
-                }
-                Ok(action)
-            }
+            Stmt::Block(stmts) => self.execute_block(stmts),
             Stmt::Break => Ok(Action::Break),
         }
     }

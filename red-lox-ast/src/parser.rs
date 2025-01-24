@@ -425,7 +425,7 @@ impl Parser {
                 _ => break,
             }
         }
-        expr
+        Ok(expr)
     }
 
     fn finish_call(&mut self, callee: Box<Expr>) -> Result<Box<Expr>, ParseError> {

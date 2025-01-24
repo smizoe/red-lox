@@ -3,15 +3,19 @@ mod environment;
 mod expr;
 mod stmt;
 
+use std::{cell::RefCell, rc::Rc};
+
 use crate::stmt::{Action, Error};
 use environment::Environment;
+use expr::Value;
 use red_lox_ast::{
     scanner::Token,
     stmt::{Evaluator, Stmt},
 };
 
 pub struct Interpreter<'a, 'b> {
-    environment: Box<Environment>,
+    global: Rc<RefCell<Environment>>,
+    environment: Rc<RefCell<Environment>>,
     out: &'a mut dyn std::io::Write,
     err: &'b mut dyn std::io::Write,
 }
@@ -22,14 +26,22 @@ pub struct EnvGuard<'a, 'b, 'c> {
 
 impl<'a, 'b, 'c> Drop for EnvGuard<'a, 'b, 'c> {
     fn drop(&mut self) {
-        self.interpreter.environment.exit();
+        let enclosing = self
+            .interpreter
+            .environment
+            .borrow()
+            .get_enclosing()
+            .unwrap();
+        self.interpreter.environment = enclosing
     }
 }
 
 impl<'a, 'b> Interpreter<'a, 'b> {
     pub fn new(out: &'a mut dyn std::io::Write, err: &'b mut dyn std::io::Write) -> Self {
+        let mut global = Environment::default();
         Self {
-            environment: Box::new(Environment::default()),
+            global: Rc::new(RefCell::new(global)),
+            environment: Rc::new(RefCell::new(Environment::default())),
             out,
             err,
         }
@@ -47,7 +59,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
     }
 
     pub fn enter(&mut self) -> EnvGuard<'_, 'a, 'b> {
-        self.environment.enter();
+        self.environment.borrow_mut().enter();
         EnvGuard { interpreter: self }
     }
 
@@ -62,7 +74,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                     Token::Identifier(n) => n,
                     _ => unreachable!(),
                 };
-                self.environment.define(name, v);
+                self.environment.borrow_mut().define(name, v);
             }
         }
     }
@@ -76,6 +88,18 @@ impl<'a, 'b> Interpreter<'a, 'b> {
         };
         self.handle_side_effect(action);
         Ok(is_break)
+    }
+
+    fn execute_block(&mut self, stmts: &Vec<Box<Stmt>>) -> Result<Action, Error> {
+        let guard = self.enter();
+        let mut action = Action::Eval(Value::Nil);
+        for stmt in stmts {
+            if guard.interpreter.execute(&stmt)? {
+                action = Action::Break;
+                break;
+            }
+        }
+        Ok(action)
     }
 }
 

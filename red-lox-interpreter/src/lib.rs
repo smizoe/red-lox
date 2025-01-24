@@ -1,12 +1,14 @@
 pub mod command;
 mod environment;
 mod expr;
+mod globals;
 mod stmt;
 
 use std::rc::Rc;
 
 use crate::stmt::{Action, Error};
 use environment::Environment;
+use globals::register_globals;
 use expr::Value;
 use red_lox_ast::{
     scanner::Token,
@@ -33,6 +35,7 @@ impl<'a, 'b, 'c> Drop for EnvGuard<'a, 'b, 'c> {
 impl<'a, 'b> Interpreter<'a, 'b> {
     pub fn new(out: &'a mut dyn std::io::Write, err: &'b mut dyn std::io::Write) -> Self {
         let mut global = Environment::default();
+        register_globals(&mut global);
         Self {
             global: Rc::new(global),
             environment: Rc::new(Environment::default()),

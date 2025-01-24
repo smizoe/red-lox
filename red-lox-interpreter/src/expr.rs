@@ -18,6 +18,7 @@ pub enum Value {
     NativeFn {
         name: String,
         fun: Rc<RefCell<dyn FnMut(Vec<Value>) -> Result<Value, Error>>>,
+        arity: usize,
     },
     Function {
         name: String,
@@ -290,7 +291,17 @@ impl<'a, 'b> Evaluator<Result<Value, Error>> for Interpreter<'a, 'b> {
                     args.push(self.evaluate_expr(&arg)?);
                 }
                 match callee {
-                    Value::NativeFn { name: _name, fun } => fun.borrow_mut()(args),
+                    Value::NativeFn { name, fun, arity } => {
+                        if arity != args.len() {
+                            return Err(Error::ArityMismatchError {
+                                name,
+                                arity,
+                                num_arguments: arguments.len(),
+                                location: paren.location.clone(),
+                            });
+                        }
+                        fun.borrow_mut()(args)
+                    }
                     Value::Function { name, body, arity } => {
                         if arguments.len() != arity {
                             return Err(Error::ArityMismatchError {

@@ -99,6 +99,7 @@ impl Parser {
     }
 
     fn function(&mut self, kind: &str) -> Result<Box<Stmt>, ParseError> {
+        self.advance();
         let name = self
             .consume(
                 |t| match t {
@@ -498,7 +499,7 @@ impl Parser {
         let mut arguments = Vec::new();
         if self.peek().token != Token::RightParen {
             loop {
-                arguments.push(self.expression()?);
+                arguments.push(self.assignment()?);
                 match self.peek().token {
                     Token::Comma => {
                         self.advance();

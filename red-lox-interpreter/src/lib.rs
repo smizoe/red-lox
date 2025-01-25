@@ -102,8 +102,13 @@ impl<'a, 'b> Interpreter<'a, 'b> {
 
     fn execute(&mut self, stmt: &Stmt) -> Result<Action, Error> {
         let action = self.evaluate_stmt(stmt)?;
-        self.handle_side_effect(action.clone());
-        Ok(action)
+        match action {
+            Action::Return(_) if self.fn_call_nest == 0 => Err(Error::InvalidReturnStmtError()),
+            _ => {
+                self.handle_side_effect(action.clone());
+                Ok(action)
+            }
+        }
     }
 
     fn execute_block(&mut self, stmts: &Vec<Box<Stmt>>) -> Result<Action, Error> {

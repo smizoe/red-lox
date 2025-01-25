@@ -22,6 +22,8 @@ pub enum Action {
 pub enum Error {
     #[error("Failed to evaluate the expression of the statement: {}", .0)]
     ExprEvalError(expr::Error),
+    #[error("A return statement encountered outside the function/method context.")]
+    InvalidReturnStmtError(),
 }
 
 impl<'a, 'b> Evaluator<Result<Action, Error>> for Interpreter<'a, 'b> {
@@ -56,6 +58,7 @@ impl<'a, 'b> Evaluator<Result<Action, Error>> for Interpreter<'a, 'b> {
                 {
                     match self.evaluate_stmt(body)? {
                         Action::Break => break,
+                        act @ Action::Return(_) => return Ok(act),
                         _ => (),
                     }
                 }
@@ -74,7 +77,7 @@ impl<'a, 'b> Evaluator<Result<Action, Error>> for Interpreter<'a, 'b> {
                     },
                     body: Rc::new(body.clone()),
                     params: params.clone(),
-                    closure: self.environment.clone()
+                    closure: self.environment.clone(),
                 },
             )),
             Stmt::Var(t, expr) => match expr.as_ref() {

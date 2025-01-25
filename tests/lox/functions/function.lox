@@ -1,0 +1,25 @@
+fun add(a, b, c) {
+    print a + b + c;
+}
+add(1, 2, 3);  // out: 6
+
+fun add(a, b) {
+    print a + b;
+}
+print add; // out: <fn add>
+
+fun sayHi(first, last) {
+    print "Hi, " + first + " " + last + "!";
+}
+sayHi("Dear", "Reader"); // out: Hi, Dear Reader!
+
+fun count(n) {
+    while (n < 100) {
+        if (n == 3) return n;
+        print n;
+        n = n + 1;
+    }
+}
+count(1);
+// out: 1
+// out: 2

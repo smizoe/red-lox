@@ -74,6 +74,7 @@ impl<'a, 'b> Evaluator<Result<Action, Error>> for Interpreter<'a, 'b> {
                     },
                     body: Rc::new(body.clone()),
                     params: params.clone(),
+                    closure: self.environment.clone()
                 },
             )),
             Stmt::Var(t, expr) => match expr.as_ref() {

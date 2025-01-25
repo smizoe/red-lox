@@ -11,8 +11,11 @@ pub struct Environment {
 }
 
 impl Environment {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(enclosing: Rc<Environment>) -> Self {
+        Self {
+            enclosing: RefCell::new(Some(enclosing)),
+            values: RefCell::new(HashMap::default()),
+        }
     }
 
     pub fn enter(self: &mut Rc<Self>) {

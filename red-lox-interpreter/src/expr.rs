@@ -7,6 +7,7 @@ use red_lox_ast::{
 };
 
 use crate::{
+    environment::Environment,
     stmt::{self, Action},
     Interpreter,
 };
@@ -28,6 +29,7 @@ pub enum Value {
         // body is Rc<..> to make this clonable.
         body: Rc<Vec<Box<Stmt>>>,
         params: Vec<TokenWithLocation>,
+        closure: Rc<Environment>,
     },
 }
 
@@ -305,7 +307,12 @@ impl<'a, 'b> Evaluator<Result<Value, Error>> for Interpreter<'a, 'b> {
                         }
                         fun.borrow_mut()(args)
                     }
-                    Value::Function { name, body, params } => {
+                    Value::Function {
+                        name,
+                        body,
+                        params,
+                        closure,
+                    } => {
                         if arguments.len() != params.len() {
                             return Err(Error::ArityMismatchError {
                                 name,
@@ -314,7 +321,20 @@ impl<'a, 'b> Evaluator<Result<Value, Error>> for Interpreter<'a, 'b> {
                                 location: paren.location.clone(),
                             });
                         }
-                        self.execute_block(&body)
+                        let guard = self.start_calling_fn(Rc::new(Environment::new(closure)));
+                        for (arg, param) in arguments.into_iter().zip(params) {
+                            let v = guard.interpreter.evaluate_expr(arg)?;
+                            guard.interpreter.environment.define(
+                                match param.token {
+                                    Token::Identifier(id) => id,
+                                    _ => unreachable!(),
+                                },
+                                v,
+                            );
+                        }
+                        guard
+                            .interpreter
+                            .execute_block(&body)
                             .map_err(|e| match e {
                                 stmt::Error::ExprEvalError(e) => e,
                             })

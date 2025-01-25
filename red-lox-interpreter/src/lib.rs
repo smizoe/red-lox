@@ -16,7 +16,7 @@ use red_lox_ast::{
 };
 
 pub struct Interpreter<'a, 'b> {
-    global: Rc<Environment>,
+    globals: Rc<Environment>,
     environment: Rc<Environment>,
     out: &'a mut dyn std::io::Write,
     err: &'b mut dyn std::io::Write,
@@ -33,13 +33,26 @@ impl<'a, 'b, 'c> Drop for EnvGuard<'a, 'b, 'c> {
     }
 }
 
+pub struct FnCallGuard<'a, 'b, 'c> {
+    interpreter: &'a mut Interpreter<'b, 'c>,
+    original_env: Rc<Environment>,
+}
+
+impl<'a, 'b, 'c> Drop for FnCallGuard<'a, 'b, 'c> {
+    fn drop(&mut self) {
+        self.interpreter.fn_call_nest -= 1;
+        std::mem::swap(&mut self.interpreter.environment, &mut self.original_env);
+    }
+}
+
 impl<'a, 'b> Interpreter<'a, 'b> {
     pub fn new(out: &'a mut dyn std::io::Write, err: &'b mut dyn std::io::Write) -> Self {
-        let mut global = Environment::default();
-        register_globals(&mut global);
+        let mut globals = Environment::default();
+        register_globals(&mut globals);
+        let globals = Rc::new(globals);
         Self {
-            global: Rc::new(global),
-            environment: Rc::new(Environment::default()),
+            globals: globals.clone(),
+            environment: globals,
             out,
             err,
             fn_call_nest: 0,
@@ -62,6 +75,15 @@ impl<'a, 'b> Interpreter<'a, 'b> {
         EnvGuard { interpreter: self }
     }
 
+    pub fn start_calling_fn(&mut self, mut closure: Rc<Environment>) -> FnCallGuard<'_, 'a, 'b> {
+        self.fn_call_nest += 1;
+        std::mem::swap(&mut self.environment, &mut closure);
+        FnCallGuard {
+            interpreter: self,
+            original_env: closure,
+        }
+    }
+
     fn handle_side_effect(&mut self, action: Action) {
         match action {
             Action::Print(v) => {
@@ -78,7 +100,6 @@ impl<'a, 'b> Interpreter<'a, 'b> {
         }
     }
 
-    // Returns true when the resulting Action was Action::Break.
     fn execute(&mut self, stmt: &Stmt) -> Result<Action, Error> {
         let action = self.evaluate_stmt(stmt)?;
         self.handle_side_effect(action.clone());

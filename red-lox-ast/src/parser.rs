@@ -177,6 +177,7 @@ impl Parser {
         match self.peek().token {
             Token::If => self.if_stmt(),
             Token::Print => self.print_stmt(),
+            Token::Return => self.return_stmt(),
             Token::While => {
                 let guard = self.nest();
                 guard.parser.while_stmt()
@@ -210,6 +211,27 @@ impl Parser {
                 }
             }
             _ => self.expression_stmt(),
+        }
+    }
+
+    fn return_stmt(&mut self) -> Result<Box<Stmt>, ParseError> {
+        let keyword = self.advance().clone();
+        match self.peek().token {
+            Token::Semicolon => {
+                let location = self.advance().location.clone();
+                Ok(Box::new(Stmt::Return(
+                    keyword,
+                    Box::new(Expr::LiteralNil(location)),
+                )))
+            }
+            _ => {
+                let expr = self.expression()?;
+                self.consume(
+                    |t| t == &Token::Semicolon,
+                    |t| format!("Expected ';' after return value, found {:?}", t.token),
+                )?;
+                Ok(Box::new(Stmt::Return(keyword, expr)))
+            }
         }
     }
 

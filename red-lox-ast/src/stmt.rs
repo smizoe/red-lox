@@ -24,6 +24,7 @@ pub enum Stmt {
         body: Box<Stmt>,
     },
     Break,
+    Return(TokenWithLocation, Box<Expr>),
 }
 
 pub trait Evaluator<R> {

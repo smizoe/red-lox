@@ -6,7 +6,10 @@ use red_lox_ast::{
     stmt::Stmt,
 };
 
-use crate::{stmt, Interpreter};
+use crate::{
+    stmt::{self, Action},
+    Interpreter,
+};
 
 // Value has to implement Clone to return the value of Value when it is assigned to a variable.
 #[derive(Clone)]
@@ -315,7 +318,10 @@ impl<'a, 'b> Evaluator<Result<Value, Error>> for Interpreter<'a, 'b> {
                             .map_err(|e| match e {
                                 stmt::Error::ExprEvalError(e) => e,
                             })
-                            .map(|_| Value::Nil)
+                            .map(|action| match action {
+                                Action::Return(v) => v,
+                                _ => Value::Nil,
+                            })
                     }
                     _ => Err(Error::InvalidCalleeError(paren.location.clone())),
                 }

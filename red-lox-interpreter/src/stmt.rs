@@ -9,10 +9,12 @@ use red_lox_ast::{
 use crate::expr;
 use crate::{expr::Value, Interpreter};
 
+#[derive(Clone)]
 pub enum Action {
     Print(Value),
     Eval(Value),
     Define(Token, Value),
+    Return(Value),
     Break,
 }
 
@@ -82,6 +84,9 @@ impl<'a, 'b> Evaluator<Result<Action, Error>> for Interpreter<'a, 'b> {
                 None => Ok(Action::Define(t.clone(), Value::Nil)),
             },
             Stmt::Block(stmts) => self.execute_block(stmts),
+            Stmt::Return(t, v) => Ok(Action::Return(
+                self.evaluate_expr(v).map_err(Error::ExprEvalError)?,
+            )),
             Stmt::Break => Ok(Action::Break),
         }
     }

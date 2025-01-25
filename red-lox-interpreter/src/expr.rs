@@ -321,15 +321,18 @@ impl<'a, 'b> Evaluator<Result<Value, Error>> for Interpreter<'a, 'b> {
                                 location: paren.location.clone(),
                             });
                         }
+                        let mut expr_args = Vec::with_capacity(arguments.len());
+                        for arg in arguments {
+                            expr_args.push(self.evaluate_expr(arg)?);
+                        }
                         let guard = self.start_calling_fn(Rc::new(Environment::new(closure)));
-                        for (arg, param) in arguments.into_iter().zip(params) {
-                            let v = guard.interpreter.evaluate_expr(arg)?;
+                        for (arg, param) in expr_args.into_iter().zip(params) {
                             guard.interpreter.environment.define(
                                 match param.token {
                                     Token::Identifier(id) => id,
                                     _ => unreachable!(),
                                 },
-                                v,
+                                arg,
                             );
                         }
                         guard

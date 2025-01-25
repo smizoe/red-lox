@@ -23,3 +23,11 @@ fun count(n) {
 count(1);
 // out: 1
 // out: 2
+fun count(n) {
+    if (n > 1) count(n - 1);
+    print n;
+}
+count(3);
+//// out: 1
+//// out: 2
+//// out: 3

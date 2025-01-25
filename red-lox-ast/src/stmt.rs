@@ -1,10 +1,19 @@
-use crate::{expr::Expr, scanner::Token};
+use crate::{
+    expr::Expr,
+    scanner::{Token, TokenWithLocation},
+};
 
+#[derive(Clone)]
 pub enum Stmt {
     Expression(Box<Expr>),
     Print(Box<Expr>),
     Var(Token, Option<Box<Expr>>),
     Block(Vec<Box<Stmt>>),
+    Function {
+        name: TokenWithLocation,
+        params: Vec<TokenWithLocation>,
+        body: Vec<Box<Stmt>>,
+    },
     If {
         condition: Box<Expr>,
         then_branch: Box<Stmt>,

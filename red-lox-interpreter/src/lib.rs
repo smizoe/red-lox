@@ -44,9 +44,9 @@ impl<'a, 'b> Interpreter<'a, 'b> {
         }
     }
 
-    pub fn interpret(&mut self, stmts: &Vec<Box<Stmt>>) {
-        for stmt in stmts.iter() {
-            match self.execute(stmt) {
+    pub fn interpret(&mut self, stmts: Vec<Box<Stmt>>) {
+        for stmt in stmts {
+            match self.execute(&stmt) {
                 Ok(_) => (),
                 Err(e) => {
                     writeln!(self.err, "{}", e).expect("failed to write to Interpreter's out");

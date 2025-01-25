@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use red_lox_ast::expr::Evaluator as _;
 use red_lox_ast::{
     scanner::Token,
@@ -61,6 +63,17 @@ impl<'a, 'b> Evaluator<Result<Action, Error>> for Interpreter<'a, 'b> {
                 Ok(v) => Ok(Action::Eval(v)),
                 Err(e) => Err(Error::ExprEvalError(e)),
             },
+            Stmt::Function { name, params, body } => Ok(Action::Define(
+                name.token.clone(),
+                Value::Function {
+                    name: match &name.token {
+                        Token::Identifier(n) => n.clone(),
+                        _ => unreachable!(),
+                    },
+                    body: Rc::new(body.clone()),
+                    params: params.clone(),
+                },
+            )),
             Stmt::Var(t, expr) => match expr.as_ref() {
                 Some(e) => match self.evaluate_expr(e) {
                     Ok(v) => Ok(Action::Define(t.clone(), v)),

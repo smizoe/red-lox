@@ -55,6 +55,6 @@ fn run(interpreter: &mut Interpreter, prog: &str) -> anyhow::Result<()> {
         }
         return Err(anyhow::anyhow!("Error"));
     }
-    interpreter.interpret(&result.stmts);
+    interpreter.interpret(result.stmts);
     Ok(())
 }

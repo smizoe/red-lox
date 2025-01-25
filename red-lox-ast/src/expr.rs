@@ -1,6 +1,6 @@
 use crate::scanner::{Location, TokenWithLocation};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     ExprSeries(Vec<Box<Expr>>),
     Ternary {

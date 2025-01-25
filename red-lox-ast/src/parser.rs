@@ -1,4 +1,3 @@
-
 use crate::{
     expr::Expr,
     scanner::{Location, Token, TokenWithLocation},
@@ -86,6 +85,7 @@ impl Parser {
 
     fn declaration(&mut self) -> Result<Box<Stmt>, ParseError> {
         let stmt = match self.peek().token {
+            Token::Fun => self.function("function"),
             Token::Var => {
                 self.advance();
                 self.var_declaration()
@@ -96,6 +96,51 @@ impl Parser {
             self.synchronize();
         }
         stmt
+    }
+
+    fn function(&mut self, kind: &str) -> Result<Box<Stmt>, ParseError> {
+        let name = self
+            .consume(
+                |t| match t {
+                    Token::Identifier(_) => true,
+                    _ => false,
+                },
+                |t| format!("Expect {kind} name"),
+            )?
+            .clone();
+        self.consume(
+            |t| t == &Token::LeftParen,
+            |t| format!("Expect '(' after {kind} name."),
+        )?;
+        let mut params = Vec::new();
+        if self.peek().token != Token::RightParen {
+            loop {
+                params.push(
+                    self.consume(
+                        |t| match t {
+                            Token::Identifier(_) => true,
+                            _ => false,
+                        },
+                        |t| format!("Expected a parameter name, found {:?}", t.token),
+                    )?
+                    .clone(),
+                );
+                if self.peek().token != Token::Comma {
+                    break;
+                }
+                self.advance();
+            }
+        }
+        self.consume(
+            |t| t == &Token::RightParen,
+            |t| format!("Expect ')' after parameters."),
+        )?;
+        self.consume(
+            |t| t == &Token::LeftBrace,
+            |t| format!("Expected '{{' before {} body, found {:?}", kind, t.token),
+        )?;
+        let body = self.block()?;
+        Ok(Box::new(Stmt::Function { name, params, body }))
     }
 
     fn var_declaration(&mut self) -> Result<Box<Stmt>, ParseError> {

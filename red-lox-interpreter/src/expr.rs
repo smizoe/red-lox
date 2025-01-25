@@ -24,7 +24,7 @@ pub enum Value {
         name: String,
         // body is Rc<..> to make this clonable.
         body: Rc<Vec<Box<Stmt>>>,
-        arity: usize,
+        params: Vec<TokenWithLocation>,
     },
 }
 
@@ -57,11 +57,11 @@ impl std::fmt::Debug for Value {
                 .field("name", name)
                 .field("fun", &format_args!("_native_fn_"))
                 .finish(),
-            Self::Function { name, arity, .. } => f
+            Self::Function { name, params, .. } => f
                 .debug_struct("Function")
                 .field("name", name)
                 .field("body", &format_args!("_function_body_"))
-                .field("arity", arity)
+                .field("params", params)
                 .finish(),
         }
     }
@@ -84,7 +84,7 @@ impl Value {
             String(s) => s.clone(),
             Number(v) => v.to_string(),
             Bool(b) => b.to_string(),
-            NativeFn { .. } => "<native fn>".to_string(),
+            NativeFn { name, .. } => format!("<native fn {}>", name),
             Function { name, .. } => format!("<fn {}>", name),
         }
     }
@@ -302,11 +302,11 @@ impl<'a, 'b> Evaluator<Result<Value, Error>> for Interpreter<'a, 'b> {
                         }
                         fun.borrow_mut()(args)
                     }
-                    Value::Function { name, body, arity } => {
-                        if arguments.len() != arity {
+                    Value::Function { name, body, params } => {
+                        if arguments.len() != params.len() {
                             return Err(Error::ArityMismatchError {
                                 name,
-                                arity,
+                                arity: params.len(),
                                 num_arguments: arguments.len(),
                                 location: paren.location.clone(),
                             });

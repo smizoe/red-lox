@@ -151,7 +151,7 @@ impl Parser {
                     Token::Identifier(_) => true,
                     _ => false,
                 },
-                |t: &TokenWithLocation| format!("Expect variable name, found {:?}", t.token),
+                |t: &TokenWithLocation| format!("Expected variable name, found {:?}", t.token),
             )?
             .token
             .clone();

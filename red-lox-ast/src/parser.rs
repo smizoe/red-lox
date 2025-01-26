@@ -106,12 +106,12 @@ impl Parser {
                     Token::Identifier(_) => true,
                     _ => false,
                 },
-                |t| format!("Expect {kind} name"),
+                |t| format!("Expected {kind} name, found {:?}", t.token),
             )?
             .clone();
         self.consume(
             |t| t == &Token::LeftParen,
-            |t| format!("Expect '(' after {kind} name."),
+            |t| format!("Expected '(' after {kind} name, found {:?}", t.token),
         )?;
         let mut params = Vec::new();
         if self.peek().token != Token::RightParen {
@@ -134,7 +134,7 @@ impl Parser {
         }
         self.consume(
             |t| t == &Token::RightParen,
-            |t| format!("Expect ')' after parameters."),
+            |t| format!("Expected ')' after parameters, found {:?}", t.token),
         )?;
         self.consume(
             |t| t == &Token::LeftBrace,

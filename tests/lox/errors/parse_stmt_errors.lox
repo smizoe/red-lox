@@ -4,6 +4,8 @@ fun add{;
 fun add(a,);
 fun add(a,b};
 fun add(a, b) {);
+if a == 1;
+if (a == 1};
 // err: One or more errors occurred during parsing the expression:
 // err: [at column 5 in line 1] ParseError: Expected function name, found Number(1.0)
 // err: [at column 9 in line 2] ParseError: Expected a parameter name, found Number(1.0)
@@ -11,3 +13,5 @@ fun add(a, b) {);
 // err: [at column 11 in line 4] ParseError: Expected a parameter name, found RightParen
 // err: [at column 12 in line 5] ParseError: Expected ')' after parameters, found RightBrace
 // err: [at column 16 in line 6] ParseError: Unexpected token RightParen found
+// err: [at column 4 in line 7] ParseError: Expected '(' after 'if', found Identifier("a")
+// err: [at column 10 in line 8] ParseError: Expected ')' after if condition, found RightBrace

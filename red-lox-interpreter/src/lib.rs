@@ -27,6 +27,13 @@ pub struct EnvGuard<'a, 'b, 'c> {
     interpreter: &'a mut Interpreter<'b, 'c>,
 }
 
+impl<'a, 'b, 'c> EnvGuard<'a, 'b, 'c> {
+    fn new(interpreter: &'a mut Interpreter<'b, 'c>) -> Self {
+        interpreter.environment.enter();
+        Self { interpreter }
+    }
+}
+
 impl<'a, 'b, 'c> Drop for EnvGuard<'a, 'b, 'c> {
     fn drop(&mut self) {
         self.interpreter.environment.exit();
@@ -36,6 +43,17 @@ impl<'a, 'b, 'c> Drop for EnvGuard<'a, 'b, 'c> {
 pub struct FnCallGuard<'a, 'b, 'c> {
     interpreter: &'a mut Interpreter<'b, 'c>,
     original_env: Rc<Environment>,
+}
+
+impl<'a, 'b, 'c> FnCallGuard<'a, 'b, 'c> {
+    fn new(interpreter: &'a mut Interpreter<'b, 'c>, mut closure: Rc<Environment>) -> Self {
+        interpreter.fn_call_nest += 1;
+        std::mem::swap(&mut interpreter.environment, &mut closure);
+        Self {
+            interpreter: interpreter,
+            original_env: closure,
+        }
+    }
 }
 
 impl<'a, 'b, 'c> Drop for FnCallGuard<'a, 'b, 'c> {
@@ -71,17 +89,11 @@ impl<'a, 'b> Interpreter<'a, 'b> {
     }
 
     pub fn enter(&mut self) -> EnvGuard<'_, 'a, 'b> {
-        self.environment.enter();
-        EnvGuard { interpreter: self }
+        EnvGuard::new(self)
     }
 
-    pub fn start_calling_fn(&mut self, mut closure: Rc<Environment>) -> FnCallGuard<'_, 'a, 'b> {
-        self.fn_call_nest += 1;
-        std::mem::swap(&mut self.environment, &mut closure);
-        FnCallGuard {
-            interpreter: self,
-            original_env: closure,
-        }
+    pub fn start_calling_fn(&mut self, closure: Rc<Environment>) -> FnCallGuard<'_, 'a, 'b> {
+        FnCallGuard::new(self, closure)
     }
 
     fn handle_side_effect(&mut self, action: Action) {

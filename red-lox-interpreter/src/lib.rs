@@ -25,7 +25,6 @@ pub struct Interpreter<'a, 'b> {
     environment: Rc<Environment>,
     out: &'a mut dyn std::io::Write,
     err: &'b mut dyn std::io::Write,
-    fn_call_nest: usize,
     locals: HashMap<Location, usize>,
 }
 
@@ -67,7 +66,6 @@ pub struct FnCallGuard<'a, 'b, 'c> {
 
 impl<'a, 'b, 'c> FnCallGuard<'a, 'b, 'c> {
     fn new(interpreter: &'a mut Interpreter<'b, 'c>, mut closure: Rc<Environment>) -> Self {
-        interpreter.fn_call_nest += 1;
         std::mem::swap(&mut interpreter.environment, &mut closure);
         Self {
             interpreter: interpreter,
@@ -92,7 +90,6 @@ impl<'a, 'b, 'c> DerefMut for FnCallGuard<'a, 'b, 'c> {
 
 impl<'a, 'b, 'c> Drop for FnCallGuard<'a, 'b, 'c> {
     fn drop(&mut self) {
-        self.interpreter.fn_call_nest -= 1;
         std::mem::swap(&mut self.interpreter.environment, &mut self.original_env);
     }
 }
@@ -113,7 +110,6 @@ impl<'a, 'b> Interpreter<'a, 'b> {
             environment: globals,
             out,
             err,
-            fn_call_nest: 0,
             locals: HashMap::new(),
         }
     }

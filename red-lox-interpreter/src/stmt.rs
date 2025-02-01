@@ -85,7 +85,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                 let mut guard = self.enter();
                 guard.execute_block(stmts)
             }
-            Stmt::Return(t, v) => Ok(Action::Return(
+            Stmt::Return(_t, v) => Ok(Action::Return(
                 self.evaluate_expr(v).map_err(Error::ExprEvalError)?,
             )),
             Stmt::Break => Ok(Action::Break),

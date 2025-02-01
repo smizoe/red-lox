@@ -338,7 +338,6 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                             .execute_block(&body)
                             .map_err(|e| match e {
                                 stmt::Error::ExprEvalError(e) => e,
-                                _ => unreachable!(),
                             })
                             .map(|action| match action {
                                 Action::Return(v) => v,

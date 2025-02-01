@@ -7,6 +7,9 @@ fun add(a, b) {);
 if a == 1;
 if (a == 1};
 var 1;
+{
+    break;
+}
 // err: One or more errors occurred during parsing the expression:
 // err: [at column 5 in line 1] ParseError: Expected function name, found Number(1.0)
 // err: [at column 9 in line 2] ParseError: Expected a parameter name, found Number(1.0)
@@ -17,3 +20,4 @@ var 1;
 // err: [at column 4 in line 7] ParseError: Expected '(' after 'if', found Identifier("a")
 // err: [at column 10 in line 8] ParseError: Expected ')' after if condition, found RightBrace
 // err: [at column 5 in line 9] ParseError: Expected variable name, found Number(1.0)
+// err: [at column 5 in line 11] ParseError: Keyword 'break' encountered without a enclosing loop.

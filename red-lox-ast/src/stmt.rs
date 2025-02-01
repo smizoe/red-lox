@@ -26,7 +26,3 @@ pub enum Stmt {
     Break,
     Return(TokenWithLocation, Box<Expr>),
 }
-
-pub trait Evaluator<R> {
-    fn evaluate_stmt(&mut self, stmt: &Stmt) -> R;
-}

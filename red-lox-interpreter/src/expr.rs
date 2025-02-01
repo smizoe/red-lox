@@ -1,7 +1,7 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use red_lox_ast::{
-    expr::{Evaluator, Expr},
+    expr::Expr,
     scanner::{Location, Token, TokenWithLocation},
     stmt::Stmt,
 };
@@ -210,8 +210,8 @@ fn handle_binary_op(
     }
 }
 
-impl<'a, 'b> Evaluator<Result<Value, Error>> for Interpreter<'a, 'b> {
-    fn evaluate_expr(&mut self, expr: &Expr) -> Result<Value, Error> {
+impl<'a, 'b> Interpreter<'a, 'b> {
+    pub fn evaluate_expr(&mut self, expr: &Expr) -> Result<Value, Error> {
         use Expr::*;
         match expr {
             LiteralBool(b, _) => Ok(Value::Bool(*b)),

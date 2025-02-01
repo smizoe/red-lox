@@ -17,7 +17,7 @@ use expr::Value;
 use globals::register_globals;
 use red_lox_ast::{
     scanner::{Location, Token, TokenWithLocation},
-    stmt::{Evaluator, Stmt},
+    stmt::Stmt,
 };
 
 pub struct Interpreter<'a, 'b> {

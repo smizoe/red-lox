@@ -1,10 +1,6 @@
 use std::rc::Rc;
 
-use red_lox_ast::expr::Evaluator as _;
-use red_lox_ast::{
-    scanner::Token,
-    stmt::{Evaluator, Stmt},
-};
+use red_lox_ast::{scanner::Token, stmt::Stmt};
 
 use crate::expr;
 use crate::{expr::Value, Interpreter};
@@ -24,8 +20,8 @@ pub enum Error {
     ExprEvalError(expr::Error),
 }
 
-impl<'a, 'b> Evaluator<Result<Action, Error>> for Interpreter<'a, 'b> {
-    fn evaluate_stmt(&mut self, stmt: &Stmt) -> Result<Action, Error> {
+impl<'a, 'b> Interpreter<'a, 'b> {
+    pub fn evaluate_stmt(&mut self, stmt: &Stmt) -> Result<Action, Error> {
         match stmt {
             Stmt::If {
                 condition,

@@ -16,5 +16,6 @@
     }
     showA();  // out: global
     var a = "block";
+    a;  // avoid the unused variable error
     showA();  // out: global
 }

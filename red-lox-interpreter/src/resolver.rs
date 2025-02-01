@@ -3,15 +3,22 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use red_lox_ast::scanner::TokenWithLocation;
+use red_lox_ast::scanner::{Location, TokenWithLocation};
 
 use crate::Interpreter;
 
 pub struct Resolver<'a, 'b, 'c> {
     interpreter: &'a mut Interpreter<'b, 'c>,
-    scopes: Vec<HashMap<String, bool>>,
+    scopes: Vec<HashMap<String, (VaraiableState, Location)>>,
     function_type: FunctionType,
     errors: Vec<Error>,
+}
+
+#[derive(PartialEq)]
+enum VaraiableState {
+    Uninitialized,
+    Initialized,
+    Used,
 }
 
 #[derive(PartialEq)]
@@ -24,10 +31,12 @@ enum FunctionType {
 pub enum Error {
     #[error("{} Cannot read a local variable in its own initializer.", .0.location)]
     InvalidInitializationError(TokenWithLocation),
-    #[error("{} Already a variable with name {} in this scope.", .0.location, .0.token.id_name())]
+    #[error("{} Already a variable with name '{}' in this scope.", .0.location, .0.token.id_name())]
     DuplicateVariableDeclarationError(TokenWithLocation),
     #[error("{} Cannot return from top-level code.", .0.location)]
     TopLevelReturnError(TokenWithLocation),
+    #[error("{location} Varable '{name}' is defined but unused.")]
+    UnusedLocalVariableError { name: String, location: Location },
 }
 
 struct ScopeGuard<'a, 'b, 'c, 'd> {
@@ -67,7 +76,14 @@ impl<'a, 'b, 'c, 'd> DerefMut for ScopeGuard<'a, 'b, 'c, 'd> {
 
 impl<'a, 'b, 'c, 'd> Drop for ScopeGuard<'a, 'b, 'c, 'd> {
     fn drop(&mut self) {
-        self.resolver.scopes.pop();
+        if let Some(scope) = self.resolver.scopes.pop() {
+            for (k, (state, location)) in scope.into_iter() {
+                if state != VaraiableState::Used {
+                    self.errors
+                        .push(Error::UnusedLocalVariableError { name: k, location });
+                }
+            }
+        }
         if let Some(ft) = self.prev_function_type.as_mut() {
             std::mem::swap(&mut self.resolver.function_type, ft);
         }
@@ -111,13 +127,20 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
                     .push(Error::DuplicateVariableDeclarationError(token.clone()));
                 return;
             }
-            scope.insert(token.token.id_name().to_string(), false);
+            scope.insert(
+                token.token.id_name().to_string(),
+                (VaraiableState::Uninitialized, token.location.clone()),
+            );
         }
     }
 
     fn define(&mut self, token: &TokenWithLocation) {
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(token.token.id_name().to_string(), true);
+            scope
+                .entry(token.token.id_name().to_string())
+                .and_modify(|(state, _)| {
+                    *state = VaraiableState::Initialized;
+                });
         }
     }
 
@@ -218,7 +241,12 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
             red_lox_ast::expr::Expr::Unary { operator: _, right } => self.resolve_expr(&right),
             red_lox_ast::expr::Expr::Variable(token) => {
                 if let Some(scope) = self.scopes.last() {
-                    if !scope.get(token.token.id_name()).cloned().unwrap_or(true) {
+                    if scope
+                        .get(token.token.id_name())
+                        .map(|(state, _)| state)
+                        .unwrap_or(&VaraiableState::Initialized)
+                        == &VaraiableState::Uninitialized
+                    {
                         self.errors
                             .push(Error::InvalidInitializationError(token.clone()));
                         return;
@@ -236,7 +264,8 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
 
     fn resolve_local(&mut self, token: &TokenWithLocation) {
         for i in (0..self.scopes.len()).rev() {
-            if let Some(_) = self.scopes[i].get(token.token.id_name()) {
+            if let Some((state, _)) = self.scopes[i].get_mut(token.token.id_name()) {
+                *state = VaraiableState::Used;
                 self.interpreter
                     .resolve(token.location.clone(), self.scopes.len() - 1 - i);
                 return;

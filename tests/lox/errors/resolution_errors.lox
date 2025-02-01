@@ -3,6 +3,7 @@ fun bad() {
     var a = "first";
     var a = "second";
     var a = "baz";
+    a;
 }
 {
     if (true) {
@@ -12,7 +13,8 @@ fun bad() {
 }
 // err: One or more errors occurred during resolving variables:
 // err: [at column 1 in line 1] Cannot return from top-level code.
-// err: [at column 9 in line 4] Already a variable with name a in this scope.
-// err: [at column 9 in line 5] Already a variable with name a in this scope.
-// err: [at column 17 in line 9] Cannot read a local variable in its own initializer.
-// err: [at column 9 in line 10] Cannot return from top-level code.
+// err: [at column 9 in line 4] Already a variable with name 'a' in this scope.
+// err: [at column 9 in line 5] Already a variable with name 'a' in this scope.
+// err: [at column 17 in line 10] Cannot read a local variable in its own initializer.
+// err: [at column 9 in line 11] Cannot return from top-level code.
+// err: [at column 13 in line 10] Varable 'a' is defined but unused.

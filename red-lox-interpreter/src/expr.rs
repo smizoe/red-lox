@@ -273,10 +273,13 @@ impl<'a, 'b> Evaluator<Result<Value, Error>> for Interpreter<'a, 'b> {
                     ),
                 }
             }
-            Variable(t) => self.environment.get(t),
+            Variable(t) => self.lookup_variable(t),
             Assign { name, expr } => {
                 let value = self.evaluate_expr(&expr)?;
-                self.environment.assign(name, value)
+                match self.locals.get(&name.location).cloned() {
+                    Some(distance) => self.environment.assign_at(distance, name, value),
+                    None => self.environment.assign(name, value),
+                }
             }
             ExprSeries(exprs) => {
                 let mut last_value = self.evaluate_expr(&exprs[0])?;
@@ -321,13 +324,9 @@ impl<'a, 'b> Evaluator<Result<Value, Error>> for Interpreter<'a, 'b> {
                                 location: paren.location.clone(),
                             });
                         }
-                        let mut expr_args = Vec::with_capacity(arguments.len());
-                        for arg in arguments {
-                            expr_args.push(self.evaluate_expr(arg)?);
-                        }
-                        let guard = self.start_calling_fn(Rc::new(Environment::new(closure)));
-                        for (arg, param) in expr_args.into_iter().zip(params) {
-                            guard.interpreter.environment.define(
+                        let mut guard = self.start_calling_fn(Rc::new(Environment::new(closure)));
+                        for (arg, param) in args.into_iter().zip(params) {
+                            guard.environment.define(
                                 match param.token {
                                     Token::Identifier(id) => id,
                                     _ => unreachable!(),
@@ -336,7 +335,6 @@ impl<'a, 'b> Evaluator<Result<Value, Error>> for Interpreter<'a, 'b> {
                             );
                         }
                         guard
-                            .interpreter
                             .execute_block(&body)
                             .map_err(|e| match e {
                                 stmt::Error::ExprEvalError(e) => e,

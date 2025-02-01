@@ -2,16 +2,21 @@ pub mod command;
 mod environment;
 mod expr;
 mod globals;
+mod resolver;
 mod stmt;
 
-use std::rc::Rc;
+use std::{
+    collections::HashMap,
+    ops::{Deref, DerefMut},
+    rc::Rc,
+};
 
 use crate::stmt::{Action, Error};
 use environment::Environment;
 use expr::Value;
 use globals::register_globals;
 use red_lox_ast::{
-    scanner::Token,
+    scanner::{Location, Token, TokenWithLocation},
     stmt::{Evaluator, Stmt},
 };
 
@@ -21,6 +26,7 @@ pub struct Interpreter<'a, 'b> {
     out: &'a mut dyn std::io::Write,
     err: &'b mut dyn std::io::Write,
     fn_call_nest: usize,
+    locals: HashMap<Location, usize>,
 }
 
 pub struct EnvGuard<'a, 'b, 'c> {
@@ -31,6 +37,20 @@ impl<'a, 'b, 'c> EnvGuard<'a, 'b, 'c> {
     fn new(interpreter: &'a mut Interpreter<'b, 'c>) -> Self {
         interpreter.environment.enter();
         Self { interpreter }
+    }
+}
+
+impl<'a, 'b, 'c> Deref for EnvGuard<'a, 'b, 'c> {
+    type Target = Interpreter<'b, 'c>;
+
+    fn deref(&self) -> &Self::Target {
+        self.interpreter
+    }
+}
+
+impl<'a, 'b, 'c> DerefMut for EnvGuard<'a, 'b, 'c> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.interpreter
     }
 }
 
@@ -56,11 +76,31 @@ impl<'a, 'b, 'c> FnCallGuard<'a, 'b, 'c> {
     }
 }
 
+impl<'a, 'b, 'c> Deref for FnCallGuard<'a, 'b, 'c> {
+    type Target = Interpreter<'b, 'c>;
+
+    fn deref(&self) -> &Self::Target {
+        self.interpreter
+    }
+}
+
+impl<'a, 'b, 'c> DerefMut for FnCallGuard<'a, 'b, 'c> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.interpreter
+    }
+}
+
 impl<'a, 'b, 'c> Drop for FnCallGuard<'a, 'b, 'c> {
     fn drop(&mut self) {
         self.interpreter.fn_call_nest -= 1;
         std::mem::swap(&mut self.interpreter.environment, &mut self.original_env);
     }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct ResolverKey {
+    name: String,
+    location: Location,
 }
 
 impl<'a, 'b> Interpreter<'a, 'b> {
@@ -74,6 +114,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
             out,
             err,
             fn_call_nest: 0,
+            locals: HashMap::new(),
         }
     }
 
@@ -96,6 +137,17 @@ impl<'a, 'b> Interpreter<'a, 'b> {
         FnCallGuard::new(self, closure)
     }
 
+    pub fn resolve(&mut self, location: Location, depth: usize) {
+        self.locals.insert(location, depth);
+    }
+
+    fn lookup_variable(&self, token: &TokenWithLocation) -> Result<Value, expr::Error> {
+        match self.locals.get(&token.location) {
+            None => self.globals.get(token),
+            Some(&distance) => self.environment.get_at(distance, token),
+        }
+    }
+
     fn handle_side_effect(&mut self, action: Action) {
         match action {
             Action::Print(v) => {
@@ -114,20 +166,14 @@ impl<'a, 'b> Interpreter<'a, 'b> {
 
     fn execute(&mut self, stmt: &Stmt) -> Result<Action, Error> {
         let action = self.evaluate_stmt(stmt)?;
-        match action {
-            Action::Return(_) if self.fn_call_nest == 0 => Err(Error::InvalidReturnStmtError()),
-            _ => {
-                self.handle_side_effect(action.clone());
-                Ok(action)
-            }
-        }
+        self.handle_side_effect(action.clone());
+        Ok(action)
     }
 
     fn execute_block(&mut self, stmts: &Vec<Box<Stmt>>) -> Result<Action, Error> {
-        let guard = self.enter();
         let mut action = Action::Eval(Value::Nil);
         for stmt in stmts {
-            match guard.interpreter.execute(&stmt)? {
+            match self.execute(&stmt)? {
                 a @ (Action::Break | Action::Return(_)) => {
                     action = a;
                     break;

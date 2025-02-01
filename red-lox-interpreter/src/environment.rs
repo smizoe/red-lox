@@ -51,6 +51,31 @@ impl Environment {
         })
     }
 
+    fn ancestor(self: &Rc<Self>, distance: usize) -> Option<Rc<Self>> {
+        let mut env = self.clone();
+        for _ in 0..distance {
+            let enclosing = env.enclosing.borrow().clone();
+            match enclosing {
+                Some(e) => env = e,
+                None => return None,
+            }
+        }
+        Some(env)
+    }
+
+    pub fn get_at(
+        self: &Rc<Environment>,
+        distance: usize,
+        token: &TokenWithLocation,
+    ) -> Result<Value, expr::Error> {
+        let env = self.ancestor(distance);
+        env.and_then(|env| {
+            let borrowed = env.values.borrow();
+            borrowed.get(token.token.id_name()).cloned()
+        })
+        .ok_or(expr::Error::UndefinedVariableError(token.clone()))
+    }
+
     pub fn assign(&self, token: &TokenWithLocation, val: Value) -> Result<Value, expr::Error> {
         let name = match &token.token {
             Token::Identifier(n) => n,
@@ -60,7 +85,7 @@ impl Environment {
             .ok_or(expr::Error::UndefinedVariableError(token.clone()))
     }
 
-    pub fn assign_internal(&self, name: &str, val: Value) -> Option<Value> {
+    fn assign_internal(&self, name: &str, val: Value) -> Option<Value> {
         match self.values.borrow_mut().get_mut(name) {
             Some(v) => {
                 *v = val;
@@ -72,5 +97,21 @@ impl Environment {
                 .as_ref()
                 .and_then(|e| e.assign_internal(name, val)),
         }
+    }
+
+    pub fn assign_at(
+        self: &Rc<Environment>,
+        distance: usize,
+        token: &TokenWithLocation,
+        value: Value,
+    ) -> Result<Value, expr::Error> {
+        let env = self.ancestor(distance);
+        env.map(|e| {
+            e.values
+                .borrow_mut()
+                .insert(token.token.id_name().to_string(), value.clone());
+            value
+        })
+        .ok_or(expr::Error::UndefinedVariableError(token.clone()))
     }
 }

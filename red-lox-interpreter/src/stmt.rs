@@ -22,8 +22,6 @@ pub enum Action {
 pub enum Error {
     #[error("Failed to evaluate the expression of the statement: {}", .0)]
     ExprEvalError(expr::Error),
-    #[error("A return statement encountered outside the function/method context.")]
-    InvalidReturnStmtError(),
 }
 
 impl<'a, 'b> Evaluator<Result<Action, Error>> for Interpreter<'a, 'b> {
@@ -82,12 +80,15 @@ impl<'a, 'b> Evaluator<Result<Action, Error>> for Interpreter<'a, 'b> {
             )),
             Stmt::Var(t, expr) => match expr.as_ref() {
                 Some(e) => match self.evaluate_expr(e) {
-                    Ok(v) => Ok(Action::Define(t.clone(), v)),
+                    Ok(v) => Ok(Action::Define(t.token.clone(), v)),
                     Err(e) => Err(Error::ExprEvalError(e)),
                 },
-                None => Ok(Action::Define(t.clone(), Value::Nil)),
+                None => Ok(Action::Define(t.token.clone(), Value::Nil)),
             },
-            Stmt::Block(stmts) => self.execute_block(stmts),
+            Stmt::Block(stmts) => {
+                let mut guard = self.enter();
+                guard.execute_block(stmts)
+            }
             Stmt::Return(t, v) => Ok(Action::Return(
                 self.evaluate_expr(v).map_err(Error::ExprEvalError)?,
             )),

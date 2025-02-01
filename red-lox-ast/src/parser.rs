@@ -153,7 +153,6 @@ impl Parser {
                 },
                 |t: &TokenWithLocation| format!("Expected variable name, found {:?}", t.token),
             )?
-            .token
             .clone();
         let expr = if self.peek().token == Token::Equal {
             self.advance();

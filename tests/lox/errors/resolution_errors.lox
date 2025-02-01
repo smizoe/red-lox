@@ -1,0 +1,3 @@
+return;
+// err: One or more errors occurred during resolving variables:
+// err: [at column 1 in line 1] Cannot return from top-level code.

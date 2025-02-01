@@ -1,6 +1,4 @@
-return;
 1 + true;
-// err: A return statement encountered outside the function/method context.
-// err: Failed to evaluate the expression of the statement: [at column 3 in line 2] Operands of binary operator Plus must be two numbers or one of them must be a string, but the following were passed:
+// err: Failed to evaluate the expression of the statement: [at column 3 in line 1] Operands of binary operator Plus must be two numbers or one of them must be a string, but the following were passed:
 // err:     lhs: Number
 // err:     rhs: Bool

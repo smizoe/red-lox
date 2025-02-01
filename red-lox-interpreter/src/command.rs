@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use crate::Interpreter;
+use crate::{resolver::Resolver, Interpreter};
 use red_lox_ast::{parser::Parser, scanner::Scanner};
 
 pub fn run_file(file_path: &Path, interpreter: &mut Interpreter) -> anyhow::Result<()> {
@@ -39,9 +39,9 @@ fn run(interpreter: &mut Interpreter, prog: &str) -> anyhow::Result<()> {
             "One or more errors occurred during tokenization:"
         )?;
         for e in result.errors.iter() {
-            println!("{}", e);
+            writeln!(interpreter.out, "{}", e)?;
         }
-        return Err(anyhow::anyhow!("Error"));
+        return Err(anyhow::anyhow!("Tokenization Error"));
     }
     let mut parser = Parser::new(result.tokens);
     let result = parser.parse();
@@ -53,7 +53,19 @@ fn run(interpreter: &mut Interpreter, prog: &str) -> anyhow::Result<()> {
         for e in result.errors.iter() {
             writeln!(interpreter.err, "{}", e)?;
         }
-        return Err(anyhow::anyhow!("Error"));
+        return Err(anyhow::anyhow!("Parse Error"));
+    }
+
+    let mut resolver = Resolver::new(interpreter);
+    if let Err(es) = resolver.resolve(&result.stmts) {
+        writeln!(
+            interpreter.err,
+            "One or more errors occurred during resolving variables:"
+        )?;
+        for e in es {
+            writeln!(interpreter.err, "{}", e)?;
+        }
+        return Err(anyhow::anyhow!("Resolution Error"))
     }
     interpreter.interpret(result.stmts);
     Ok(())

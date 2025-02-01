@@ -1,13 +1,13 @@
 use crate::{
     expr::Expr,
-    scanner::{Token, TokenWithLocation},
+    scanner::TokenWithLocation,
 };
 
 #[derive(Clone)]
 pub enum Stmt {
     Expression(Box<Expr>),
     Print(Box<Expr>),
-    Var(Token, Option<Box<Expr>>),
+    Var(TokenWithLocation, Option<Box<Expr>>),
     Block(Vec<Box<Stmt>>),
     Function {
         name: TokenWithLocation,

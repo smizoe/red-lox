@@ -78,7 +78,16 @@ pub enum Token {
     Eof,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+impl Token {
+    pub fn id_name(&self) -> &str {
+        match self {
+            Token::Identifier(n) => n,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
 pub struct Location {
     pub line: usize,
     pub column: usize,

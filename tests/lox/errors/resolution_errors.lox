@@ -1,3 +1,8 @@
 return;
+fun bad() {
+    var a = "first";
+    var a = "second";
+}
 // err: One or more errors occurred during resolving variables:
 // err: [at column 1 in line 1] Cannot return from top-level code.
+// err: [at column 9 in line 4] Already a variable with name a in this scope.

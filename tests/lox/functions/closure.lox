@@ -9,3 +9,12 @@
  var counter = makeCounter();
  counter(); // out: 1
  counter(); // out: 2
+ var a = "global";
+{
+    fun showA() {
+        print a;
+    }
+    showA();  // out: global
+    var a = "block";
+    showA();  // out: global
+}

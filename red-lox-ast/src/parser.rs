@@ -1,3 +1,5 @@
+use std::ops::{Deref, DerefMut};
+
 use crate::{
     expr::Expr,
     scanner::{Location, Token, TokenWithLocation},
@@ -43,6 +45,20 @@ struct NestGuard<'a> {
 impl<'a> Drop for NestGuard<'a> {
     fn drop(&mut self) {
         self.parser.nest_level -= 1;
+    }
+}
+
+impl<'a> Deref for NestGuard<'a> {
+    type Target = Parser;
+
+    fn deref(&self) -> &Self::Target {
+        self.parser
+    }
+}
+
+impl<'a> DerefMut for NestGuard<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.parser
     }
 }
 
@@ -179,12 +195,12 @@ impl Parser {
             Token::Print => self.print_stmt(),
             Token::Return => self.return_stmt(),
             Token::While => {
-                let guard = self.nest();
-                guard.parser.while_stmt()
+                let mut guard = self.nest();
+                guard.while_stmt()
             }
             Token::For => {
-                let guard = self.nest();
-                guard.parser.for_stmt()
+                let mut guard = self.nest();
+                guard.for_stmt()
             }
             Token::LeftBrace => {
                 self.advance();

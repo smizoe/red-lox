@@ -83,7 +83,6 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                         name,
                         Value::Class {
                             name: name.token.id_name().to_string(),
-                            ctor: FunctionDefinition::new(Vec::new(), Vec::new()),
                         },
                     )
                     .map(|v| Action::Eval(v))

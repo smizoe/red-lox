@@ -31,7 +31,9 @@ pub enum Value {
     },
     Class {
         name: String,
-        ctor: FunctionDefinition,
+    },
+    Instance {
+        class_name: String,
     },
 }
 
@@ -124,6 +126,10 @@ impl std::fmt::Debug for Value {
                 .field("params", params)
                 .finish(),
             Self::Class { name, .. } => f.debug_struct("Class").field("name", name).finish(),
+            Self::Instance { class_name } => f
+                .debug_struct("Instance")
+                .field("class_name", class_name)
+                .finish(),
         }
     }
 }
@@ -134,7 +140,10 @@ impl Value {
             Value::Nil => false,
             Value::Bool(b) => *b,
             Value::Number(_) | Value::String(_) => true,
-            Value::NativeFn { .. } | Value::Function { .. } | Value::Class { .. } => true,
+            Value::NativeFn { .. }
+            | Value::Function { .. }
+            | Value::Class { .. }
+            | Value::Instance { .. } => true,
         }
     }
 
@@ -148,6 +157,7 @@ impl Value {
             NativeFn { name, .. } => format!("<native fn {}>", name),
             Function { name, .. } => format!("<fn {}>", name),
             Class { name, .. } => format!("<class {}>", name),
+            Instance { class_name } => format!("{} instance", class_name),
         }
     }
 
@@ -161,6 +171,7 @@ impl Value {
             NativeFn { .. } => "NativeFn",
             Function { .. } => "Function",
             Class { .. } => "Class",
+            Instance { .. } => "Instance",
         }
     }
 }
@@ -373,6 +384,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                         definition,
                         closure,
                     } => definition.call(self, &name, paren.location.clone(), closure, args),
+                    Value::Class { name } => Ok(Value::Instance { class_name: name }),
                     _ => Err(Error::InvalidCalleeError(paren.location.clone())),
                 }
             }

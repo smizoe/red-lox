@@ -262,6 +262,9 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
                 self.resolve_expr(expr);
                 self.resolve_local(name);
             }
+            red_lox_ast::expr::Expr::Get { expr, .. } => {
+                self.resolve_expr(expr);
+            }
             _ => (),
         }
     }

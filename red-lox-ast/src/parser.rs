@@ -536,6 +536,17 @@ impl Parser {
                     self.advance();
                     expr = self.finish_call(expr)?;
                 }
+                Token::Dot => {
+                    self.advance();
+                    let name = self.consume(
+                        |t| match t {
+                            Token::Identifier(_) => true,
+                            _ => false,
+                        },
+                        |t| format!("Expected a property name after '.'."),
+                    )?.clone();
+                    expr = Box::new(Expr::Get { expr, name});
+                }
                 _ => break,
             }
         }

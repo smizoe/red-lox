@@ -1,4 +1,4 @@
-use std::{cell::RefCell, fmt::Display, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
 
 use red_lox_ast::{
     expr::Expr,
@@ -34,6 +34,7 @@ pub enum Value {
     },
     Instance {
         class_name: String,
+        fields: HashMap<String, Value>,
     },
 }
 
@@ -126,9 +127,10 @@ impl std::fmt::Debug for Value {
                 .field("params", params)
                 .finish(),
             Self::Class { name, .. } => f.debug_struct("Class").field("name", name).finish(),
-            Self::Instance { class_name } => f
+            Self::Instance { class_name, fields } => f
                 .debug_struct("Instance")
                 .field("class_name", class_name)
+                .field("fields", fields)
                 .finish(),
         }
     }
@@ -157,7 +159,7 @@ impl Value {
             NativeFn { name, .. } => format!("<native fn {}>", name),
             Function { name, .. } => format!("<fn {}>", name),
             Class { name, .. } => format!("<class {}>", name),
-            Instance { class_name } => format!("{} instance", class_name),
+            Instance { class_name, .. } => format!("{} instance", class_name),
         }
     }
 
@@ -217,6 +219,13 @@ pub enum Error {
     },
     #[error("{} Can only call functions and classes.", .0)]
     InvalidCalleeError(Location),
+    #[error("{location} Only instances have properties, but found {type_name}")]
+    InvalidCallToAccessorError {
+        type_name: String,
+        location: Location,
+    },
+    #[error("{location} Undefined property {name} is accessed.")]
+    UnknowPropertyAccessError { name: String, location: Location },
 }
 
 fn handle_binary_op(
@@ -357,6 +366,24 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                 }
                 Ok(last_value)
             }
+            Get { expr, name } => {
+                let obj = self.evaluate_expr(expr)?;
+                match obj {
+                    Value::Instance { class_name, fields } => {
+                        match fields.get(name.token.id_name()) {
+                            Some(v) => Ok(v.clone()),
+                            None => Err(Error::UnknowPropertyAccessError {
+                                name: name.token.id_name().to_string(),
+                                location: name.location.clone(),
+                            }),
+                        }
+                    }
+                    _ => Err(Error::InvalidCallToAccessorError {
+                        type_name: obj.to_type_str().to_string(),
+                        location: name.location.clone(),
+                    }),
+                }
+            }
             Call {
                 callee,
                 paren,
@@ -384,7 +411,10 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                         definition,
                         closure,
                     } => definition.call(self, &name, paren.location.clone(), closure, args),
-                    Value::Class { name } => Ok(Value::Instance { class_name: name }),
+                    Value::Class { name } => Ok(Value::Instance {
+                        class_name: name,
+                        fields: HashMap::new(),
+                    }),
                     _ => Err(Error::InvalidCalleeError(paren.location.clone())),
                 }
             }

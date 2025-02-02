@@ -31,6 +31,9 @@ pub enum Value {
         params: Vec<TokenWithLocation>,
         closure: Rc<Environment>,
     },
+    Class {
+        name: String,
+    },
 }
 
 impl PartialEq for Value {
@@ -68,6 +71,7 @@ impl std::fmt::Debug for Value {
                 .field("body", &format_args!("_function_body_"))
                 .field("params", params)
                 .finish(),
+            Self::Class { name } => f.debug_struct("Class").field("name", name).finish(),
         }
     }
 }
@@ -78,7 +82,7 @@ impl Value {
             Value::Nil => false,
             Value::Bool(b) => *b,
             Value::Number(_) | Value::String(_) => true,
-            Value::NativeFn { .. } | Value::Function { .. } => true,
+            Value::NativeFn { .. } | Value::Function { .. } | Value::Class { .. } => true,
         }
     }
 
@@ -91,6 +95,7 @@ impl Value {
             Bool(b) => b.to_string(),
             NativeFn { name, .. } => format!("<native fn {}>", name),
             Function { name, .. } => format!("<fn {}>", name),
+            Class { name, .. } => format!("<class {}>", name),
         }
     }
 
@@ -103,6 +108,7 @@ impl Value {
             Bool(_) => "Bool",
             NativeFn { .. } => "NativeFn",
             Function { .. } => "Function",
+            Class { .. } => "Class",
         }
     }
 }

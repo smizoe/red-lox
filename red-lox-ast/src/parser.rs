@@ -101,7 +101,14 @@ impl Parser {
 
     fn declaration(&mut self) -> Result<Box<Stmt>, ParseError> {
         let stmt = match self.peek().token {
-            Token::Fun => self.function("function"),
+            Token::Class => {
+                self.advance();
+                self.class()
+            }
+            Token::Fun => {
+                self.advance();
+                self.function("function")
+            }
             Token::Var => {
                 self.advance();
                 self.var_declaration()
@@ -114,8 +121,33 @@ impl Parser {
         stmt
     }
 
+    fn class(&mut self) -> Result<Box<Stmt>, ParseError> {
+        let name = self
+            .consume(
+                |t| match t {
+                    Token::Identifier(_) => true,
+                    _ => false,
+                },
+                |t| format!("Expected class name, found {:?}", t.token),
+            )?
+            .clone();
+        self.consume(
+            |t| t == &Token::LeftBrace,
+            |t| format!("Expected '{{' before class body, found {:?}", t.token),
+        )?;
+
+        let mut methods = Vec::new();
+        while self.peek().token != Token::RightBrace && !self.is_at_end() {
+            methods.push(self.function("method")?);
+        }
+        self.consume(
+            |t| t == &Token::RightBrace,
+            |t| format!("Expected '}}' after class body, found {:?}", t.token),
+        )?;
+        Ok(Box::new(Stmt::Class { name, methods }))
+    }
+
     fn function(&mut self, kind: &str) -> Result<Box<Stmt>, ParseError> {
-        self.advance();
         let name = self
             .consume(
                 |t| match t {

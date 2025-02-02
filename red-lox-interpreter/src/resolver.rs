@@ -173,6 +173,10 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
                     guard.resolve_stmt(stmt);
                 }
             }
+            red_lox_ast::stmt::Stmt::Class { name, methods } => {
+                self.declare(name);
+                self.define(name);
+            }
             red_lox_ast::stmt::Stmt::If {
                 condition,
                 then_branch,

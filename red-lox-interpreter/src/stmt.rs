@@ -9,7 +9,6 @@ use crate::{expr::Value, Interpreter};
 pub enum Action {
     Print(Value),
     Eval(Value),
-    Define(Token, Value),
     Return(Value),
     Break,
 }
@@ -62,24 +61,47 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                 Ok(v) => Ok(Action::Eval(v)),
                 Err(e) => Err(Error::ExprEvalError(e)),
             },
-            Stmt::Function { name, params, body } => Ok(Action::Define(
-                name.token.clone(),
-                Value::Function {
-                    name: match &name.token {
-                        Token::Identifier(n) => n.clone(),
-                        _ => unreachable!(),
+            Stmt::Function { name, params, body } => {
+                self.environment.define(
+                    name.token.id_name().to_string(),
+                    Value::Function {
+                        name: match &name.token {
+                            Token::Identifier(n) => n.clone(),
+                            _ => unreachable!(),
+                        },
+                        body: Rc::new(body.clone()),
+                        params: params.clone(),
+                        closure: self.environment.clone(),
                     },
-                    body: Rc::new(body.clone()),
-                    params: params.clone(),
-                    closure: self.environment.clone(),
-                },
-            )),
+                );
+                Ok(Action::Eval(Value::Nil))
+            }
+            Stmt::Class { name, methods } => {
+                self.environment
+                    .define(name.token.id_name().to_string(), Value::Nil);
+                self.environment
+                    .assign(
+                        name,
+                        Value::Class {
+                            name: name.token.id_name().to_string(),
+                        },
+                    )
+                    .map(|v| Action::Eval(v))
+                    .map_err(Error::ExprEvalError)
+            }
             Stmt::Var(t, expr) => match expr.as_ref() {
                 Some(e) => match self.evaluate_expr(e) {
-                    Ok(v) => Ok(Action::Define(t.token.clone(), v)),
+                    Ok(v) => {
+                        self.environment.define(t.token.id_name().to_string(), v);
+                        Ok(Action::Eval(Value::Nil))
+                    }
                     Err(e) => Err(Error::ExprEvalError(e)),
                 },
-                None => Ok(Action::Define(t.token.clone(), Value::Nil)),
+                None => {
+                    self.environment
+                        .define(t.token.id_name().to_string(), Value::Nil);
+                    Ok(Action::Eval(Value::Nil))
+                }
             },
             Stmt::Block(stmts) => {
                 let mut guard = self.enter();

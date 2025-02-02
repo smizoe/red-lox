@@ -16,7 +16,7 @@ use environment::Environment;
 use expr::Value;
 use globals::register_globals;
 use red_lox_ast::{
-    scanner::{Location, Token, TokenWithLocation},
+    scanner::{Location, TokenWithLocation},
     stmt::Stmt,
 };
 
@@ -150,13 +150,6 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                 writeln!(self.out, "{}", v).expect("failed to write to Interpreter's out");
             }
             Action::Eval(_) | Action::Break | Action::Return(_) => (),
-            Action::Define(t, v) => {
-                let name = match t {
-                    Token::Identifier(n) => n,
-                    _ => unreachable!(),
-                };
-                self.environment.define(name, v);
-            }
         }
     }
 

@@ -1,7 +1,4 @@
-use crate::{
-    expr::Expr,
-    scanner::TokenWithLocation,
-};
+use crate::{expr::Expr, scanner::TokenWithLocation};
 
 #[derive(Clone)]
 pub enum Stmt {
@@ -13,6 +10,10 @@ pub enum Stmt {
         name: TokenWithLocation,
         params: Vec<TokenWithLocation>,
         body: Vec<Box<Stmt>>,
+    },
+    Class {
+        name: TokenWithLocation,
+        methods: Vec<Box<Stmt>>,
     },
     If {
         condition: Box<Expr>,

@@ -26,14 +26,62 @@ pub enum Value {
     },
     Function {
         name: String,
-        // body is Rc<..> to make this clonable.
-        body: Rc<Vec<Box<Stmt>>>,
-        params: Vec<TokenWithLocation>,
+        definition: FunctionDefinition,
         closure: Rc<Environment>,
     },
     Class {
         name: String,
+        ctor: FunctionDefinition,
     },
+}
+
+#[derive(Clone)]
+pub struct FunctionDefinition {
+    // body is Rc<..> to make this clonable.
+    body: Rc<Vec<Box<Stmt>>>,
+    params: Vec<TokenWithLocation>,
+}
+
+impl FunctionDefinition {
+    pub fn new(body: Vec<Box<Stmt>>, params: Vec<TokenWithLocation>) -> Self {
+        Self {
+            body: Rc::new(body),
+            params,
+        }
+    }
+
+    pub fn call(
+        &self,
+        interpreter: &mut Interpreter<'_, '_>,
+        name: &str,
+        location: Location,
+        closure: Rc<Environment>,
+        args: Vec<Value>,
+    ) -> Result<Value, Error> {
+        if args.len() != self.params.len() {
+            return Err(Error::ArityMismatchError {
+                name: name.to_string(),
+                arity: self.params.len(),
+                num_arguments: args.len(),
+                location: location.clone(),
+            });
+        }
+        let mut guard = interpreter.start_calling_fn(Rc::new(Environment::new(closure)));
+        for (arg, param) in args.into_iter().zip(self.params.iter()) {
+            guard
+                .environment
+                .define(param.token.id_name().to_string(), arg);
+        }
+        guard
+            .execute_block(&self.body)
+            .map_err(|e| match e {
+                stmt::Error::ExprEvalError(e) => e,
+            })
+            .map(|action| match action {
+                Action::Return(v) => v,
+                _ => Value::Nil,
+            })
+    }
 }
 
 impl PartialEq for Value {
@@ -65,13 +113,17 @@ impl std::fmt::Debug for Value {
                 .field("name", name)
                 .field("fun", &format_args!("_native_fn_"))
                 .finish(),
-            Self::Function { name, params, .. } => f
+            Self::Function {
+                name,
+                definition: FunctionDefinition { body, params },
+                ..
+            } => f
                 .debug_struct("Function")
                 .field("name", name)
                 .field("body", &format_args!("_function_body_"))
                 .field("params", params)
                 .finish(),
-            Self::Class { name } => f.debug_struct("Class").field("name", name).finish(),
+            Self::Class { name, .. } => f.debug_struct("Class").field("name", name).finish(),
         }
     }
 }
@@ -318,38 +370,9 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                     }
                     Value::Function {
                         name,
-                        body,
-                        params,
+                        definition,
                         closure,
-                    } => {
-                        if arguments.len() != params.len() {
-                            return Err(Error::ArityMismatchError {
-                                name,
-                                arity: params.len(),
-                                num_arguments: arguments.len(),
-                                location: paren.location.clone(),
-                            });
-                        }
-                        let mut guard = self.start_calling_fn(Rc::new(Environment::new(closure)));
-                        for (arg, param) in args.into_iter().zip(params) {
-                            guard.environment.define(
-                                match param.token {
-                                    Token::Identifier(id) => id,
-                                    _ => unreachable!(),
-                                },
-                                arg,
-                            );
-                        }
-                        guard
-                            .execute_block(&body)
-                            .map_err(|e| match e {
-                                stmt::Error::ExprEvalError(e) => e,
-                            })
-                            .map(|action| match action {
-                                Action::Return(v) => v,
-                                _ => Value::Nil,
-                            })
-                    }
+                    } => definition.call(self, &name, paren.location.clone(), closure, args),
                     _ => Err(Error::InvalidCalleeError(paren.location.clone())),
                 }
             }

@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use red_lox_ast::{scanner::Token, stmt::Stmt};
 
-use crate::expr;
+use crate::expr::{self, FunctionDefinition};
 use crate::{expr::Value, Interpreter};
 
 #[derive(Clone)]
@@ -69,8 +69,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                             Token::Identifier(n) => n.clone(),
                             _ => unreachable!(),
                         },
-                        body: Rc::new(body.clone()),
-                        params: params.clone(),
+                        definition: FunctionDefinition::new(body.clone(), params.clone()),
                         closure: self.environment.clone(),
                     },
                 );
@@ -84,6 +83,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                         name,
                         Value::Class {
                             name: name.token.id_name().to_string(),
+                            ctor: FunctionDefinition::new(Vec::new(), Vec::new()),
                         },
                     )
                     .map(|v| Action::Eval(v))

@@ -127,6 +127,19 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
         }
     }
 
+    fn add_kwd_to_scope(&mut self, kwd: &str, location: Location, function_type: FunctionType) {
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.insert(
+                "this".to_string(),
+                VariableInfo {
+                    state: VariableState::Initialized,
+                    location,
+                    function_type,
+                },
+            );
+        }
+    }
+
     fn begin_scope(&mut self) -> ScopeGuard<'_, 'a, 'b, 'c> {
         ScopeGuard::new(self, None)
     }
@@ -202,16 +215,7 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
 
                 let mut guard = self.begin_method_scope();
                 let function_type = guard.function_type;
-                if let Some(scope) = guard.scopes.last_mut() {
-                    scope.insert(
-                        "this".to_string(),
-                        VariableInfo {
-                            state: VariableState::Initialized,
-                            location: name.location.clone(),
-                            function_type,
-                        },
-                    );
-                }
+                guard.add_kwd_to_scope("this", name.location.clone(), function_type);
                 for method in methods {
                     guard.resolve_stmt(method);
                 }

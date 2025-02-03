@@ -9,22 +9,29 @@ use crate::Interpreter;
 
 pub struct Resolver<'a, 'b, 'c> {
     interpreter: &'a mut Interpreter<'b, 'c>,
-    scopes: Vec<HashMap<String, (VaraiableState, Location)>>,
+    scopes: Vec<HashMap<String, VariableInfo>>,
     function_type: FunctionType,
     errors: Vec<Error>,
 }
 
+struct VariableInfo {
+    state: VariableState,
+    location: Location,
+    function_type: FunctionType,
+}
+
 #[derive(PartialEq)]
-enum VaraiableState {
+enum VariableState {
     Uninitialized,
     Initialized,
     Used,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 enum FunctionType {
     None,
     Function,
+    Method,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -77,8 +84,16 @@ impl<'a, 'b, 'c, 'd> DerefMut for ScopeGuard<'a, 'b, 'c, 'd> {
 impl<'a, 'b, 'c, 'd> Drop for ScopeGuard<'a, 'b, 'c, 'd> {
     fn drop(&mut self) {
         if let Some(scope) = self.resolver.scopes.pop() {
-            for (k, (state, location)) in scope.into_iter() {
-                if state != VaraiableState::Used {
+            for (
+                k,
+                VariableInfo {
+                    state,
+                    location,
+                    function_type,
+                },
+            ) in scope.into_iter()
+            {
+                if state != VariableState::Used && function_type != FunctionType::Method {
                     self.errors
                         .push(Error::UnusedLocalVariableError { name: k, location });
                 }
@@ -120,6 +135,10 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
         ScopeGuard::new(self, Some(FunctionType::Function))
     }
 
+    fn begin_method_scope(&mut self) -> ScopeGuard<'_, 'a, 'b, 'c> {
+        ScopeGuard::new(self, Some(FunctionType::Method))
+    }
+
     fn declare(&mut self, token: &TokenWithLocation) {
         if let Some(scope) = self.scopes.last_mut() {
             if scope.contains_key(token.token.id_name()) {
@@ -129,18 +148,22 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
             }
             scope.insert(
                 token.token.id_name().to_string(),
-                (VaraiableState::Uninitialized, token.location.clone()),
+                VariableInfo {
+                    state: VariableState::Uninitialized,
+                    location: token.location.clone(),
+                    function_type: self.function_type,
+                },
             );
         }
     }
 
     fn define(&mut self, token: &TokenWithLocation) {
         if let Some(scope) = self.scopes.last_mut() {
-            scope
-                .entry(token.token.id_name().to_string())
-                .and_modify(|(state, _)| {
-                    *state = VaraiableState::Initialized;
-                });
+            scope.entry(token.token.id_name().to_string()).and_modify(
+                |VariableInfo { state, .. }| {
+                    *state = VariableState::Initialized;
+                },
+            );
         }
     }
 
@@ -176,6 +199,11 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
             red_lox_ast::stmt::Stmt::Class { name, methods } => {
                 self.declare(name);
                 self.define(name);
+
+                let mut guard = self.begin_method_scope();
+                for method in methods {
+                    guard.resolve_stmt(method);
+                }
             }
             red_lox_ast::stmt::Stmt::If {
                 condition,
@@ -247,9 +275,9 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
                 if let Some(scope) = self.scopes.last() {
                     if scope
                         .get(token.token.id_name())
-                        .map(|(state, _)| state)
-                        .unwrap_or(&VaraiableState::Initialized)
-                        == &VaraiableState::Uninitialized
+                        .map(|VariableInfo { state, .. }| state)
+                        .unwrap_or(&VariableState::Initialized)
+                        == &VariableState::Uninitialized
                     {
                         self.errors
                             .push(Error::InvalidInitializationError(token.clone()));
@@ -265,7 +293,7 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
             red_lox_ast::expr::Expr::Get { expr, .. } => {
                 self.resolve_expr(expr);
             }
-            red_lox_ast::expr::Expr::Set { lhs, name, rhs } => {
+            red_lox_ast::expr::Expr::Set { lhs, name: _, rhs } => {
                 self.resolve_expr(lhs);
                 self.resolve_expr(rhs);
             }
@@ -275,8 +303,9 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
 
     fn resolve_local(&mut self, token: &TokenWithLocation) {
         for i in (0..self.scopes.len()).rev() {
-            if let Some((state, _)) = self.scopes[i].get_mut(token.token.id_name()) {
-                *state = VaraiableState::Used;
+            if let Some(VariableInfo { state, .. }) = self.scopes[i].get_mut(token.token.id_name())
+            {
+                *state = VariableState::Used;
                 self.interpreter
                     .resolve(token.location.clone(), self.scopes.len() - 1 - i);
                 return;

@@ -31,9 +31,11 @@ pub enum Value {
     },
     Class {
         name: String,
+        methods: Rc<HashMap<String, Value>>,
     },
     Instance {
         class_name: String,
+        methods: Rc<HashMap<String, Value>>,
         fields: Rc<RefCell<HashMap<String, Value>>>,
     },
 }
@@ -118,7 +120,7 @@ impl std::fmt::Debug for Value {
                 .finish(),
             Self::Function {
                 name,
-                definition: FunctionDefinition { body, params },
+                definition: FunctionDefinition { body: _, params },
                 ..
             } => f
                 .debug_struct("Function")
@@ -127,11 +129,34 @@ impl std::fmt::Debug for Value {
                 .field("params", params)
                 .finish(),
             Self::Class { name, .. } => f.debug_struct("Class").field("name", name).finish(),
-            Self::Instance { class_name, fields } => f
-                .debug_struct("Instance")
-                .field("class_name", class_name)
-                .field("fields", fields)
-                .finish(),
+            Self::Instance {
+                class_name,
+                methods,
+                fields,
+            } => {
+                fn join_by_comma<S, I>(mut it: I) -> String
+                where
+                    S: AsRef<str>,
+                    I: Iterator<Item = S>,
+                {
+                    let mut joined = String::new();
+                    if let Some(s) = it.next() {
+                        joined.push_str(s.as_ref());
+                    }
+                    for item in it {
+                        joined.push_str(", ");
+                        joined.push_str(item.as_ref());
+                    }
+                    joined
+                }
+                let method_names = join_by_comma(methods.keys());
+                let field_names = join_by_comma(fields.borrow().keys());
+                f.debug_struct("Instance")
+                    .field("class_name", class_name)
+                    .field("methods", &method_names)
+                    .field("fields", &field_names)
+                    .finish()
+            }
         }
     }
 }
@@ -371,14 +396,20 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                 match obj {
                     Value::Instance {
                         class_name: _,
+                        methods,
                         fields,
-                    } => match fields.borrow().get(name.token.id_name()) {
-                        Some(v) => Ok(v.clone()),
-                        None => Err(Error::UnknowPropertyAccessError {
+                    } => {
+                        if let Some(v) = fields.borrow().get(name.token.id_name()) {
+                            return Ok(v.clone());
+                        }
+                        if let Some(m) = methods.get(name.token.id_name()) {
+                            return Ok(m.clone());
+                        }
+                        Err(Error::UnknowPropertyAccessError {
                             name: name.token.id_name().to_string(),
                             location: name.location.clone(),
-                        }),
-                    },
+                        })
+                    }
                     _ => Err(Error::InvalidCallToAccessorError {
                         type_name: obj.to_type_str().to_string(),
                         location: name.location.clone(),
@@ -390,6 +421,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                 match obj {
                     Value::Instance {
                         class_name: _,
+                        methods: _,
                         fields,
                     } => {
                         let value = self.evaluate_expr(rhs)?;
@@ -431,8 +463,9 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                         definition,
                         closure,
                     } => definition.call(self, &name, paren.location.clone(), closure, args),
-                    Value::Class { name } => Ok(Value::Instance {
+                    Value::Class { name, methods } => Ok(Value::Instance {
                         class_name: name,
+                        methods,
                         fields: Rc::new(RefCell::new(HashMap::new())),
                     }),
                     _ => Err(Error::InvalidCalleeError(paren.location.clone())),

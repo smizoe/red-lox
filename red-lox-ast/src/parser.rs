@@ -549,7 +549,7 @@ impl Parser {
                                 Token::Identifier(_) => true,
                                 _ => false,
                             },
-                            |t| format!("Expected a property name after '.'."),
+                            |_t| format!("Expected a property name after '.'."),
                         )?
                         .clone();
                     expr = Box::new(Expr::Get { expr, name });

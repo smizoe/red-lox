@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::rc::Rc;
+
 use red_lox_ast::{scanner::Token, stmt::Stmt};
 
 use crate::expr::{self, FunctionDefinition};
@@ -63,10 +66,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                 self.environment.define(
                     name.token.id_name().to_string(),
                     Value::Function {
-                        name: match &name.token {
-                            Token::Identifier(n) => n.clone(),
-                            _ => unreachable!(),
-                        },
+                        name: name.token.id_name().to_string(),
                         definition: FunctionDefinition::new(body.clone(), params.clone()),
                         closure: self.environment.clone(),
                     },
@@ -76,11 +76,35 @@ impl<'a, 'b> Interpreter<'a, 'b> {
             Stmt::Class { name, methods } => {
                 self.environment
                     .define(name.token.id_name().to_string(), Value::Nil);
+                let mut method_map = HashMap::new();
+                for method in methods {
+                    match method.as_ref() {
+                        Stmt::Function { name, params, body } => {
+                            method_map.insert(
+                                name.token.id_name().to_string(),
+                                Value::Function {
+                                    name: match &name.token {
+                                        Token::Identifier(n) => n.clone(),
+                                        _ => unreachable!(),
+                                    },
+                                    definition: FunctionDefinition::new(
+                                        body.clone(),
+                                        params.clone(),
+                                    ),
+                                    closure: self.environment.clone(),
+                                },
+                            );
+                        }
+
+                        _ => unreachable!(),
+                    }
+                }
                 self.environment
                     .assign(
                         name,
                         Value::Class {
                             name: name.token.id_name().to_string(),
+                            methods: Rc::new(method_map),
                         },
                     )
                     .map(|v| Action::Eval(v))

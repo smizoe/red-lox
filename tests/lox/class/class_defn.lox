@@ -4,3 +4,9 @@ class DevonshireCream {
     }
 }
 print DevonshireCream; // out: <class DevonshireCream>
+class Bacon {
+    eat() {
+        print "Crunch crunch crunch!";
+    }
+}
+Bacon().eat(); // out: Crunch crunch crunch!

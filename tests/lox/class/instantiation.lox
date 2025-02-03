@@ -1,3 +1,5 @@
 class Bagel {}
 var bagel = Bagel();
 print bagel; // out: Bagel instance
+bagel.hole = "large";
+print bagel.hole; // out: large

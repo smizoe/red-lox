@@ -41,4 +41,9 @@ pub enum Expr {
         expr: Box<Expr>,
         name: TokenWithLocation,
     },
+    Set {
+        lhs: Box<Expr>,
+        name: TokenWithLocation,
+        rhs: Box<Expr>,
+    },
 }

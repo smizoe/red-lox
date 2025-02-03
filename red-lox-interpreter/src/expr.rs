@@ -34,7 +34,7 @@ pub enum Value {
     },
     Instance {
         class_name: String,
-        fields: HashMap<String, Value>,
+        fields: Rc<RefCell<HashMap<String, Value>>>,
     },
 }
 
@@ -369,14 +369,34 @@ impl<'a, 'b> Interpreter<'a, 'b> {
             Get { expr, name } => {
                 let obj = self.evaluate_expr(expr)?;
                 match obj {
-                    Value::Instance { class_name, fields } => {
-                        match fields.get(name.token.id_name()) {
-                            Some(v) => Ok(v.clone()),
-                            None => Err(Error::UnknowPropertyAccessError {
-                                name: name.token.id_name().to_string(),
-                                location: name.location.clone(),
-                            }),
-                        }
+                    Value::Instance {
+                        class_name: _,
+                        fields,
+                    } => match fields.borrow().get(name.token.id_name()) {
+                        Some(v) => Ok(v.clone()),
+                        None => Err(Error::UnknowPropertyAccessError {
+                            name: name.token.id_name().to_string(),
+                            location: name.location.clone(),
+                        }),
+                    },
+                    _ => Err(Error::InvalidCallToAccessorError {
+                        type_name: obj.to_type_str().to_string(),
+                        location: name.location.clone(),
+                    }),
+                }
+            }
+            Set { lhs, name, rhs } => {
+                let obj = self.evaluate_expr(&lhs)?;
+                match obj {
+                    Value::Instance {
+                        class_name: _,
+                        fields,
+                    } => {
+                        let value = self.evaluate_expr(rhs)?;
+                        fields
+                            .borrow_mut()
+                            .insert(name.token.id_name().to_string(), value.clone());
+                        Ok(value)
                     }
                     _ => Err(Error::InvalidCallToAccessorError {
                         type_name: obj.to_type_str().to_string(),
@@ -413,7 +433,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                     } => definition.call(self, &name, paren.location.clone(), closure, args),
                     Value::Class { name } => Ok(Value::Instance {
                         class_name: name,
-                        fields: HashMap::new(),
+                        fields: Rc::new(RefCell::new(HashMap::new())),
                     }),
                     _ => Err(Error::InvalidCalleeError(paren.location.clone())),
                 }

@@ -454,6 +454,11 @@ impl Parser {
                         name: t,
                         expr: value,
                     })),
+                    Expr::Get { expr, name } => Ok(Box::new(Expr::Set {
+                        lhs: expr,
+                        name,
+                        rhs: value,
+                    })),
                     _ => Err(ParseError {
                         msg: "Invalid assignment target.".to_string(),
                         location: equals.location,
@@ -528,7 +533,7 @@ impl Parser {
     }
 
     fn call(&mut self) -> Result<Box<Expr>, ParseError> {
-        let mut expr = self.primary()?;
+        let mut expr: Box<Expr> = self.primary()?;
 
         loop {
             match self.peek().token {
@@ -538,14 +543,16 @@ impl Parser {
                 }
                 Token::Dot => {
                     self.advance();
-                    let name = self.consume(
-                        |t| match t {
-                            Token::Identifier(_) => true,
-                            _ => false,
-                        },
-                        |t| format!("Expected a property name after '.'."),
-                    )?.clone();
-                    expr = Box::new(Expr::Get { expr, name});
+                    let name = self
+                        .consume(
+                            |t| match t {
+                                Token::Identifier(_) => true,
+                                _ => false,
+                            },
+                            |t| format!("Expected a property name after '.'."),
+                        )?
+                        .clone();
+                    expr = Box::new(Expr::Get { expr, name });
                 }
                 _ => break,
             }

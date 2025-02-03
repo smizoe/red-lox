@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use red_lox_ast::{scanner::Token, stmt::Stmt};
 
 use crate::expr::{self, FunctionDefinition};

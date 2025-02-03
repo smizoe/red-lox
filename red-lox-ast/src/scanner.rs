@@ -82,6 +82,7 @@ impl Token {
     pub fn id_name(&self) -> &str {
         match self {
             Token::Identifier(n) => n,
+            Token::This => "this",
             _ => unreachable!(),
         }
     }

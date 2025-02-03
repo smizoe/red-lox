@@ -3,3 +3,22 @@ var bagel = Bagel();
 print bagel; // out: Bagel instance
 bagel.hole = "large";
 print bagel.hole; // out: large
+class Thing {
+    getCallback() {
+        fun localFunction() {
+            print this;
+        }
+        return localFunction;
+    }
+}
+var callback = Thing().getCallback();
+callback(); // out: Thing instance
+class Cake {
+    taste() {
+        var adjective = "delicious";
+        print "The " + this.flavor + " cake is " + adjective + "!";
+    }
+}
+var cake = Cake();
+cake.flavor = "German chocolate";
+cake.taste(); // out: The German chocolate cake is delicious!

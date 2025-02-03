@@ -395,7 +395,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                 let obj = self.evaluate_expr(expr)?;
                 match obj {
                     Value::Instance {
-                        class_name: _,
+                        class_name,
                         methods,
                         fields,
                     } => {
@@ -403,7 +403,29 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                             return Ok(v.clone());
                         }
                         if let Some(m) = methods.get(name.token.id_name()) {
-                            return Ok(m.clone());
+                            match m {
+                                Value::Function {
+                                    name,
+                                    definition,
+                                    closure,
+                                } => {
+                                    let with_this = Environment::new(closure.clone());
+                                    with_this.define(
+                                        "this".to_string(),
+                                        Value::Instance {
+                                            class_name,
+                                            methods: methods.clone(),
+                                            fields,
+                                        },
+                                    );
+                                    return Ok(Value::Function {
+                                        name: name.clone(),
+                                        definition: definition.clone(),
+                                        closure: Rc::new(with_this),
+                                    });
+                                }
+                                _ => unreachable!(),
+                            }
                         }
                         Err(Error::UnknowPropertyAccessError {
                             name: name.token.id_name().to_string(),
@@ -436,6 +458,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                     }),
                 }
             }
+            This(t) => self.lookup_variable(t),
             Call {
                 callee,
                 paren,

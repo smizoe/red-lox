@@ -201,6 +201,17 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
                 self.define(name);
 
                 let mut guard = self.begin_method_scope();
+                let function_type = guard.function_type;
+                if let Some(scope) = guard.scopes.last_mut() {
+                    scope.insert(
+                        "this".to_string(),
+                        VariableInfo {
+                            state: VariableState::Initialized,
+                            location: name.location.clone(),
+                            function_type,
+                        },
+                    );
+                }
                 for method in methods {
                     guard.resolve_stmt(method);
                 }
@@ -296,6 +307,9 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
             red_lox_ast::expr::Expr::Set { lhs, name: _, rhs } => {
                 self.resolve_expr(lhs);
                 self.resolve_expr(rhs);
+            }
+            red_lox_ast::expr::Expr::This(t) => {
+                self.resolve_local(t);
             }
             _ => (),
         }

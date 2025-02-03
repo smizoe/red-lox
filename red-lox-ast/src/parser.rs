@@ -606,6 +606,7 @@ impl Parser {
                 )?;
                 Ok(Box::new(Expr::Grouping(expr, token.location.clone())))
             }
+            This => Ok(Box::new(Expr::This(token))),
             Eof => Err(ParseError {
                 msg: "Eof reached while parsing an expression".to_string(),
                 location: token.location,

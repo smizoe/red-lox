@@ -46,4 +46,5 @@ pub enum Expr {
         name: TokenWithLocation,
         rhs: Box<Expr>,
     },
+    This(TokenWithLocation),
 }

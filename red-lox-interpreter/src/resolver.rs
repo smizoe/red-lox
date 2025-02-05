@@ -58,22 +58,12 @@ pub enum Error {
 
 struct ScopeGuard<'a, 'b, 'c, 'd> {
     resolver: &'a mut Resolver<'b, 'c, 'd>,
-    prev_function_type: Option<FunctionType>,
 }
 
 impl<'a, 'b, 'c, 'd> ScopeGuard<'a, 'b, 'c, 'd> {
-    fn new(
-        resolver: &'a mut Resolver<'b, 'c, 'd>,
-        mut function_type: Option<FunctionType>,
-    ) -> Self {
+    fn new(resolver: &'a mut Resolver<'b, 'c, 'd>) -> Self {
         resolver.scopes.push(HashMap::new());
-        if let Some(ft) = function_type.as_mut() {
-            std::mem::swap(&mut resolver.function_type, ft);
-        }
-        Self {
-            resolver,
-            prev_function_type: function_type,
-        }
+        Self { resolver }
     }
 }
 
@@ -109,9 +99,78 @@ impl<'a, 'b, 'c, 'd> Drop for ScopeGuard<'a, 'b, 'c, 'd> {
                 }
             }
         }
-        if let Some(ft) = self.prev_function_type.as_mut() {
-            std::mem::swap(&mut self.resolver.function_type, ft);
+    }
+}
+
+struct FunctionTypeGuard<'a, 'b, 'c, 'd> {
+    resolver: &'a mut Resolver<'b, 'c, 'd>,
+    prev_function_type: FunctionType,
+}
+
+impl<'a, 'b, 'c, 'd> FunctionTypeGuard<'a, 'b, 'c, 'd> {
+    fn new(resolver: &'a mut Resolver<'b, 'c, 'd>, function_type: FunctionType) -> Self {
+        let prev_function_type = resolver.function_type;
+        resolver.function_type = function_type;
+        Self {
+            resolver,
+            prev_function_type,
         }
+    }
+}
+
+impl<'a, 'b, 'c, 'd> Deref for FunctionTypeGuard<'a, 'b, 'c, 'd> {
+    type Target = Resolver<'b, 'c, 'd>;
+
+    fn deref(&self) -> &Self::Target {
+        self.resolver
+    }
+}
+
+impl<'a, 'b, 'c, 'd> DerefMut for FunctionTypeGuard<'a, 'b, 'c, 'd> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.resolver
+    }
+}
+
+impl<'a, 'b, 'c, 'd> Drop for FunctionTypeGuard<'a, 'b, 'c, 'd> {
+    fn drop(&mut self) {
+        self.resolver.function_type = self.prev_function_type;
+    }
+}
+
+struct ClassTypeGuard<'a, 'b, 'c, 'd> {
+    resolver: &'a mut Resolver<'b, 'c, 'd>,
+    prev_class_type: ClassType,
+}
+
+impl<'a, 'b, 'c, 'd> ClassTypeGuard<'a, 'b, 'c, 'd> {
+    fn new(resolver: &'a mut Resolver<'b, 'c, 'd>, class_type: ClassType) -> Self {
+        let prev_class_type = resolver.class_type;
+        resolver.class_type = class_type;
+        Self {
+            resolver,
+            prev_class_type,
+        }
+    }
+}
+
+impl<'a, 'b, 'c, 'd> Deref for ClassTypeGuard<'a, 'b, 'c, 'd> {
+    type Target = Resolver<'b, 'c, 'd>;
+
+    fn deref(&self) -> &Self::Target {
+        self.resolver
+    }
+}
+
+impl<'a, 'b, 'c, 'd> DerefMut for ClassTypeGuard<'a, 'b, 'c, 'd> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.resolver
+    }
+}
+
+impl<'a, 'b, 'c, 'd> Drop for ClassTypeGuard<'a, 'b, 'c, 'd> {
+    fn drop(&mut self) {
+        self.resolver.class_type = self.prev_class_type;
     }
 }
 
@@ -151,8 +210,16 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
         }
     }
 
-    fn begin_scope(&mut self, function_type: Option<FunctionType>) -> ScopeGuard<'_, 'a, 'b, 'c> {
-        ScopeGuard::new(self, function_type)
+    fn begin_scope(&mut self) -> ScopeGuard<'_, 'a, 'b, 'c> {
+        ScopeGuard::new(self)
+    }
+
+    fn begin_class(&mut self, class_type: ClassType) -> ClassTypeGuard<'_, 'a, 'b, 'c> {
+        ClassTypeGuard::new(self, class_type)
+    }
+
+    fn begin_function(&mut self, function_type: FunctionType) -> FunctionTypeGuard<'_, 'a, 'b, 'c> {
+        FunctionTypeGuard::new(self, function_type)
     }
 
     fn declare(&mut self, token: &TokenWithLocation) {
@@ -183,6 +250,21 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
         }
     }
 
+    fn resolve_function(
+        &mut self,
+        params: &Vec<TokenWithLocation>,
+        body: &Vec<Box<red_lox_ast::stmt::Stmt>>,
+    ) {
+        let mut guard = self.begin_scope();
+        for param in params {
+            guard.declare(&param);
+            guard.define(&param);
+        }
+        for stmt in body {
+            guard.resolve_stmt(stmt);
+        }
+    }
+
     fn resolve_stmt(&mut self, stmt: &red_lox_ast::stmt::Stmt) {
         match stmt {
             red_lox_ast::stmt::Stmt::Expression(expr) => self.resolve_expr(expr),
@@ -195,7 +277,7 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
                 self.define(token);
             }
             red_lox_ast::stmt::Stmt::Block(stmts) => {
-                let mut guard = self.begin_scope(None);
+                let mut guard = self.begin_scope();
                 for stmt in stmts {
                     guard.resolve_stmt(stmt);
                 }
@@ -203,27 +285,31 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
             red_lox_ast::stmt::Stmt::Function { name, params, body } => {
                 self.declare(&name);
                 self.define(&name);
-                let mut guard = self.begin_scope(Some(FunctionType::Function));
-                for param in params {
-                    guard.declare(&param);
-                    guard.define(&param);
-                }
-                for stmt in body {
-                    guard.resolve_stmt(stmt);
-                }
+                self.begin_function(FunctionType::Function)
+                    .resolve_function(params, body);
             }
             red_lox_ast::stmt::Stmt::Class { name, methods } => {
-                let enclosing_class = self.class_type;
-                self.class_type = ClassType::Class;
-                self.declare(name);
-                self.define(name);
+                let mut class_type_guard = self.begin_class(ClassType::Class);
+                class_type_guard.declare(name);
+                class_type_guard.define(name);
 
-                let mut guard = self.begin_scope(Some(FunctionType::Method));
-                guard.add_kwd_to_scope("this", name.location.clone());
+                let mut scope_guard = class_type_guard.begin_scope();
+                scope_guard.add_kwd_to_scope("this", name.location.clone());
                 for method in methods {
-                    guard.resolve_stmt(method);
+                    match method.as_ref() {
+                        red_lox_ast::stmt::Stmt::Function { name, params, body } => {
+                            let method_type = if name.token.id_name() == "init" {
+                                FunctionType::Initializer
+                            } else {
+                                FunctionType::Method
+                            };
+                            scope_guard
+                                .begin_function(method_type)
+                                .resolve_function(params, body);
+                        }
+                        _ => unreachable!(),
+                    };
                 }
-                guard.class_type = enclosing_class;
             }
             red_lox_ast::stmt::Stmt::If {
                 condition,

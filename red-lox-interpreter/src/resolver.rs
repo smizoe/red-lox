@@ -52,7 +52,7 @@ pub enum Error {
     #[error("{location} Varable '{name}' is defined but unused.")]
     UnusedLocalVariableError { name: String, location: Location },
     #[error("{} Keyword 'this' appeared outside of a class", .0)]
-    ThisKeywordOutsideClassContextError(Location)
+    ThisKeywordOutsideClassContextError(Location),
 }
 
 struct ScopeGuard<'a, 'b, 'c, 'd> {
@@ -150,16 +150,8 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
         }
     }
 
-    fn begin_scope(&mut self) -> ScopeGuard<'_, 'a, 'b, 'c> {
-        ScopeGuard::new(self, None)
-    }
-
-    fn begin_function_scope(&mut self) -> ScopeGuard<'_, 'a, 'b, 'c> {
-        ScopeGuard::new(self, Some(FunctionType::Function))
-    }
-
-    fn begin_method_scope(&mut self) -> ScopeGuard<'_, 'a, 'b, 'c> {
-        ScopeGuard::new(self, Some(FunctionType::Method))
+    fn begin_scope(&mut self, function_type: Option<FunctionType>) -> ScopeGuard<'_, 'a, 'b, 'c> {
+        ScopeGuard::new(self, function_type)
     }
 
     fn declare(&mut self, token: &TokenWithLocation) {
@@ -202,7 +194,7 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
                 self.define(token);
             }
             red_lox_ast::stmt::Stmt::Block(stmts) => {
-                let mut guard = self.begin_scope();
+                let mut guard = self.begin_scope(None);
                 for stmt in stmts {
                     guard.resolve_stmt(stmt);
                 }
@@ -210,7 +202,7 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
             red_lox_ast::stmt::Stmt::Function { name, params, body } => {
                 self.declare(&name);
                 self.define(&name);
-                let mut guard = self.begin_function_scope();
+                let mut guard = self.begin_scope(Some(FunctionType::Function));
                 for param in params {
                     guard.declare(&param);
                     guard.define(&param);
@@ -225,7 +217,7 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
                 self.declare(name);
                 self.define(name);
 
-                let mut guard = self.begin_method_scope();
+                let mut guard = self.begin_scope(Some(FunctionType::Method));
                 let function_type = guard.function_type;
                 guard.add_kwd_to_scope("this", name.location.clone(), function_type);
                 for method in methods {
@@ -327,7 +319,9 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
             }
             red_lox_ast::expr::Expr::This(t) => {
                 if self.class_type == ClassType::None {
-                    self.errors.push(Error::ThisKeywordOutsideClassContextError(t.location.clone()));
+                    self.errors.push(Error::ThisKeywordOutsideClassContextError(
+                        t.location.clone(),
+                    ));
                     return;
                 }
                 self.resolve_local(t);

@@ -11,6 +11,9 @@ fun bad() {
         return 1;
     }
 }
+fun this_outside_class() {
+    this;
+}
 // err: One or more errors occurred during resolving variables:
 // err: [at column 1 in line 1] Cannot return from top-level code.
 // err: [at column 9 in line 4] Already a variable with name 'a' in this scope.
@@ -18,3 +21,4 @@ fun bad() {
 // err: [at column 17 in line 10] Cannot read a local variable in its own initializer.
 // err: [at column 9 in line 11] Cannot return from top-level code.
 // err: [at column 13 in line 10] Varable 'a' is defined but unused.
+// err: [at column 5 in line 15] Keyword 'this' appeared outside of a class

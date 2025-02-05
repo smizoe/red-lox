@@ -11,6 +11,7 @@ pub struct Resolver<'a, 'b, 'c> {
     interpreter: &'a mut Interpreter<'b, 'c>,
     scopes: Vec<HashMap<String, VariableInfo>>,
     function_type: FunctionType,
+    class_type: ClassType,
     errors: Vec<Error>,
 }
 
@@ -34,6 +35,12 @@ enum FunctionType {
     Method,
 }
 
+#[derive(PartialEq, Clone, Copy)]
+enum ClassType {
+    None,
+    Class,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("{} Cannot read a local variable in its own initializer.", .0.location)]
@@ -44,6 +51,8 @@ pub enum Error {
     TopLevelReturnError(TokenWithLocation),
     #[error("{location} Varable '{name}' is defined but unused.")]
     UnusedLocalVariableError { name: String, location: Location },
+    #[error("{} Keyword 'this' appeared outside of a class", .0)]
+    ThisKeywordOutsideClassContextError(Location)
 }
 
 struct ScopeGuard<'a, 'b, 'c, 'd> {
@@ -111,6 +120,7 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
             interpreter,
             scopes: Vec::new(),
             function_type: FunctionType::None,
+            class_type: ClassType::None,
             errors: Vec::new(),
         }
     }
@@ -210,6 +220,8 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
                 }
             }
             red_lox_ast::stmt::Stmt::Class { name, methods } => {
+                let enclosing_class = self.class_type;
+                self.class_type = ClassType::Class;
                 self.declare(name);
                 self.define(name);
 
@@ -219,6 +231,7 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
                 for method in methods {
                     guard.resolve_stmt(method);
                 }
+                guard.class_type = enclosing_class;
             }
             red_lox_ast::stmt::Stmt::If {
                 condition,
@@ -313,6 +326,10 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
                 self.resolve_expr(rhs);
             }
             red_lox_ast::expr::Expr::This(t) => {
+                if self.class_type == ClassType::None {
+                    self.errors.push(Error::ThisKeywordOutsideClassContextError(t.location.clone()));
+                    return;
+                }
                 self.resolve_local(t);
             }
             _ => (),

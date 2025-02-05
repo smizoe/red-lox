@@ -32,6 +32,7 @@ enum VariableState {
 enum FunctionType {
     None,
     Function,
+    Initializer,
     Method,
 }
 
@@ -137,14 +138,14 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
         }
     }
 
-    fn add_kwd_to_scope(&mut self, kwd: &str, location: Location, function_type: FunctionType) {
+    fn add_kwd_to_scope(&mut self, kwd: &str, location: Location) {
         if let Some(scope) = self.scopes.last_mut() {
             scope.insert(
-                "this".to_string(),
+                kwd.to_string(),
                 VariableInfo {
-                    state: VariableState::Initialized,
+                    state: VariableState::Used,
                     location,
-                    function_type,
+                    function_type: FunctionType::None,
                 },
             );
         }
@@ -218,8 +219,7 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
                 self.define(name);
 
                 let mut guard = self.begin_scope(Some(FunctionType::Method));
-                let function_type = guard.function_type;
-                guard.add_kwd_to_scope("this", name.location.clone(), function_type);
+                guard.add_kwd_to_scope("this", name.location.clone());
                 for method in methods {
                     guard.resolve_stmt(method);
                 }

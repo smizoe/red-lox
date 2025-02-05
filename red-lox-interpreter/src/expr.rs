@@ -26,8 +26,7 @@ pub enum Value {
     },
     Function {
         name: String,
-        definition: FunctionDefinition,
-        closure: Rc<Environment>,
+        callable: Callable,
     },
     Class {
         name: String,
@@ -41,17 +40,37 @@ pub enum Value {
 }
 
 #[derive(Clone)]
-pub struct FunctionDefinition {
+pub struct Callable {
     // body is Rc<..> to make this clonable.
     body: Rc<Vec<Box<Stmt>>>,
-    params: Vec<TokenWithLocation>,
+    params: Rc<Vec<TokenWithLocation>>,
+    closure: Rc<Environment>,
+    is_initializer: bool,
 }
 
-impl FunctionDefinition {
-    pub fn new(body: Vec<Box<Stmt>>, params: Vec<TokenWithLocation>) -> Self {
+impl Callable {
+    pub fn new(
+        body: Vec<Box<Stmt>>,
+        params: Vec<TokenWithLocation>,
+        closure: Rc<Environment>,
+        is_initializer: bool,
+    ) -> Self {
         Self {
             body: Rc::new(body),
-            params,
+            params: Rc::new(params),
+            closure,
+            is_initializer,
+        }
+    }
+
+    pub fn bind(&self, this: Value) -> Self {
+        let with_this = Environment::new(self.closure.clone());
+        with_this.define("this".to_string(), this);
+        Self {
+            body: self.body.clone(),
+            params: self.params.clone(),
+            closure: Rc::new(with_this),
+            is_initializer: self.is_initializer,
         }
     }
 
@@ -60,7 +79,6 @@ impl FunctionDefinition {
         interpreter: &mut Interpreter<'_, '_>,
         name: &str,
         location: Location,
-        closure: Rc<Environment>,
         args: Vec<Value>,
     ) -> Result<Value, Error> {
         if args.len() != self.params.len() {
@@ -71,7 +89,8 @@ impl FunctionDefinition {
                 location: location.clone(),
             });
         }
-        let mut guard = interpreter.start_calling_fn(Rc::new(Environment::new(closure)));
+        let mut guard =
+            interpreter.start_calling_fn(Rc::new(Environment::new(self.closure.clone())));
         for (arg, param) in args.into_iter().zip(self.params.iter()) {
             guard
                 .environment
@@ -120,7 +139,7 @@ impl std::fmt::Debug for Value {
                 .finish(),
             Self::Function {
                 name,
-                definition: FunctionDefinition { body: _, params },
+                callable: Callable { params, .. },
                 ..
             } => f
                 .debug_struct("Function")
@@ -235,7 +254,7 @@ pub enum Error {
     UndefinedVariableError(TokenWithLocation),
     #[error("{} Division by zero occurred.", .0)]
     DivisionByZeroError(Location),
-    #[error("{location} Expected {arity} arguments for {name} but got {num_arguments}.")]
+    #[error("{location} Expected {arity} arguments for function {name} but got {num_arguments}.")]
     ArityMismatchError {
         name: String,
         arity: usize,
@@ -404,24 +423,14 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                         }
                         if let Some(m) = methods.get(name.token.id_name()) {
                             match m {
-                                Value::Function {
-                                    name,
-                                    definition,
-                                    closure,
-                                } => {
-                                    let with_this = Environment::new(closure.clone());
-                                    with_this.define(
-                                        "this".to_string(),
-                                        Value::Instance {
-                                            class_name,
-                                            methods: methods.clone(),
-                                            fields,
-                                        },
-                                    );
+                                Value::Function { name, callable } => {
                                     return Ok(Value::Function {
                                         name: name.clone(),
-                                        definition: definition.clone(),
-                                        closure: Rc::new(with_this),
+                                        callable: callable.bind(Value::Instance {
+                                            class_name: class_name,
+                                            methods: methods.clone(),
+                                            fields: fields,
+                                        }),
                                     });
                                 }
                                 _ => unreachable!(),
@@ -481,16 +490,40 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                         }
                         fun.borrow_mut()(args)
                     }
-                    Value::Function {
-                        name,
-                        definition,
-                        closure,
-                    } => definition.call(self, &name, paren.location.clone(), closure, args),
-                    Value::Class { name, methods } => Ok(Value::Instance {
-                        class_name: name,
-                        methods,
-                        fields: Rc::new(RefCell::new(HashMap::new())),
-                    }),
+                    Value::Function { name, callable } => {
+                        callable.call(self, &name, paren.location.clone(), args)
+                    }
+                    Value::Class { ref name, methods } => {
+                        let instance = Value::Instance {
+                            class_name: name.clone(),
+                            methods: methods.clone(),
+                            fields: Rc::new(RefCell::new(HashMap::new())),
+                        };
+                        match methods.get("init").cloned() {
+                            Some(init) => match init {
+                                Value::Function { callable, .. } => {
+                                    return callable.bind(instance.clone()).call(
+                                        self,
+                                        name,
+                                        paren.location.clone(),
+                                        args,
+                                    )
+                                }
+                                _ => unreachable!(),
+                            },
+                            None => {
+                                if args.len() != 0 {
+                                    return Err(Error::ArityMismatchError {
+                                        name: name.clone(),
+                                        arity: 0,
+                                        num_arguments: args.len(),
+                                        location: paren.location.clone(),
+                                    });
+                                }
+                                Ok(instance)
+                            }
+                        }
+                    }
                     _ => Err(Error::InvalidCalleeError(paren.location.clone())),
                 }
             }

@@ -123,55 +123,40 @@ impl Parser {
 
     fn class(&mut self) -> Result<Box<Stmt>, ParseError> {
         let name = self
-            .consume(
-                |t| match t {
-                    Token::Identifier(_) => true,
-                    _ => false,
-                },
-                |t| format!("Expected class name, found {:?}", t.token),
-            )?
+            .consume(Token::is_identifier, |t| {
+                format!("Expected class name, found {:?}", t.token)
+            })?
             .clone();
-        self.consume(
-            |t| t == &Token::LeftBrace,
-            |t| format!("Expected '{{' before class body, found {:?}", t.token),
-        )?;
+        self.consume(Token::is(Token::LeftBrace), |t| {
+            format!("Expected '{{' before class body, found {:?}", t.token)
+        })?;
 
         let mut methods = Vec::new();
         while self.peek().token != Token::RightBrace && !self.is_at_end() {
             methods.push(self.function("method")?);
         }
-        self.consume(
-            |t| t == &Token::RightBrace,
-            |t| format!("Expected '}}' after class body, found {:?}", t.token),
-        )?;
+        self.consume(Token::is(Token::RightBrace), |t| {
+            format!("Expected '}}' after class body, found {:?}", t.token)
+        })?;
         Ok(Box::new(Stmt::Class { name, methods }))
     }
 
     fn function(&mut self, kind: &str) -> Result<Box<Stmt>, ParseError> {
         let name = self
-            .consume(
-                |t| match t {
-                    Token::Identifier(_) => true,
-                    _ => false,
-                },
-                |t| format!("Expected {kind} name, found {:?}", t.token),
-            )?
+            .consume(Token::is_identifier, |t| {
+                format!("Expected {kind} name, found {:?}", t.token)
+            })?
             .clone();
-        self.consume(
-            |t| t == &Token::LeftParen,
-            |t| format!("Expected '(' after {kind} name, found {:?}", t.token),
-        )?;
+        self.consume(Token::is(Token::LeftParen), |t| {
+            format!("Expected '(' after {kind} name, found {:?}", t.token)
+        })?;
         let mut params = Vec::new();
         if self.peek().token != Token::RightParen {
             loop {
                 params.push(
-                    self.consume(
-                        |t| match t {
-                            Token::Identifier(_) => true,
-                            _ => false,
-                        },
-                        |t| format!("Expected a parameter name, found {:?}", t.token),
-                    )?
+                    self.consume(Token::is_identifier, |t| {
+                        format!("Expected a parameter name, found {:?}", t.token)
+                    })?
                     .clone(),
                 );
                 if self.peek().token != Token::Comma {
@@ -180,27 +165,21 @@ impl Parser {
                 self.advance();
             }
         }
-        self.consume(
-            |t| t == &Token::RightParen,
-            |t| format!("Expected ')' after parameters, found {:?}", t.token),
-        )?;
-        self.consume(
-            |t| t == &Token::LeftBrace,
-            |t| format!("Expected '{{' before {} body, found {:?}", kind, t.token),
-        )?;
+        self.consume(Token::is(Token::RightParen), |t| {
+            format!("Expected ')' after parameters, found {:?}", t.token)
+        })?;
+        self.consume(Token::is(Token::LeftBrace), |t| {
+            format!("Expected '{{' before {} body, found {:?}", kind, t.token)
+        })?;
         let body = self.block()?;
         Ok(Box::new(Stmt::Function { name, params, body }))
     }
 
     fn var_declaration(&mut self) -> Result<Box<Stmt>, ParseError> {
         let token = self
-            .consume(
-                |t| match t {
-                    Token::Identifier(_) => true,
-                    _ => false,
-                },
-                |t: &TokenWithLocation| format!("Expected variable name, found {:?}", t.token),
-            )?
+            .consume(Token::is_identifier, |t: &TokenWithLocation| {
+                format!("Expected variable name, found {:?}", t.token)
+            })?
             .clone();
         let expr = if self.peek().token == Token::Equal {
             self.advance();
@@ -209,15 +188,12 @@ impl Parser {
             None
         };
 
-        self.consume(
-            |t| t == &Token::Semicolon,
-            |t| {
-                format!(
-                    "Expected ';' after variable declaration, found {:?}.",
-                    t.token
-                )
-            },
-        )?;
+        self.consume(Token::is(Token::Semicolon), |t| {
+            format!(
+                "Expected ';' after variable declaration, found {:?}.",
+                t.token
+            )
+        })?;
         Ok(Box::new(Stmt::Var(token, expr)))
     }
 
@@ -241,15 +217,12 @@ impl Parser {
             Token::Break => {
                 let token = self.advance().clone();
                 if self.nest_level > 0 {
-                    self.consume(
-                        |t| t == &Token::Semicolon,
-                        |t: &TokenWithLocation| {
-                            format!(
-                                "Expected ';' after expression, found {:?} instead.",
-                                t.token
-                            )
-                        },
-                    )?;
+                    self.consume(Token::is(Token::Semicolon), |t: &TokenWithLocation| {
+                        format!(
+                            "Expected ';' after expression, found {:?} instead.",
+                            t.token
+                        )
+                    })?;
                     Ok(Box::new(Stmt::Break))
                 } else {
                     Err(ParseError {
@@ -271,10 +244,9 @@ impl Parser {
             }
             _ => {
                 let expr = self.expression()?;
-                self.consume(
-                    |t| t == &Token::Semicolon,
-                    |t| format!("Expected ';' after return value, found {:?}", t.token),
-                )?;
+                self.consume(Token::is(Token::Semicolon), |t| {
+                    format!("Expected ';' after return value, found {:?}", t.token)
+                })?;
                 Ok(Box::new(Stmt::Return(keyword, Some(expr))))
             }
         }
@@ -283,24 +255,20 @@ impl Parser {
     fn print_stmt(&mut self) -> Result<Box<Stmt>, ParseError> {
         self.advance();
         let expr = self.expression()?;
-        self.consume(
-            |t| t == &Token::Semicolon,
-            |t: &TokenWithLocation| {
-                format!(
-                    "Expected ';' after value to print, found {:?} instead.",
-                    t.token
-                )
-            },
-        )?;
+        self.consume(Token::is(Token::Semicolon), |t: &TokenWithLocation| {
+            format!(
+                "Expected ';' after value to print, found {:?} instead.",
+                t.token
+            )
+        })?;
         Ok(Box::new(Stmt::Print(expr)))
     }
 
     fn for_stmt(&mut self) -> Result<Box<Stmt>, ParseError> {
         self.advance();
-        self.consume(
-            |t| t == &Token::LeftParen,
-            |t| format!("Expected '(' after 'for', found {:?}", t.token),
-        )?;
+        self.consume(Token::is(Token::LeftParen), |t| {
+            format!("Expected '(' after 'for', found {:?}", t.token)
+        })?;
 
         let initializer = match self.peek().token {
             Token::Semicolon => {
@@ -319,10 +287,9 @@ impl Parser {
             _ => self.expression()?,
         };
 
-        self.consume(
-            |t| t == &Token::Semicolon,
-            |t| format!("Expected ';' after loop condition, found {:?}", t.token),
-        )?;
+        self.consume(Token::is(Token::Semicolon), |t| {
+            format!("Expected ';' after loop condition, found {:?}", t.token)
+        })?;
 
         let increment = if self.peek().token != Token::RightParen {
             Some(self.expression()?)
@@ -330,10 +297,9 @@ impl Parser {
             None
         };
 
-        self.consume(
-            |t| t == &Token::RightParen,
-            |t| format!("Expected ')' after for clauses, found {:?}", t.token),
-        )?;
+        self.consume(Token::is(Token::RightParen), |t| {
+            format!("Expected ')' after for clauses, found {:?}", t.token)
+        })?;
 
         let mut body = match increment {
             Some(expr) => Box::new(Stmt::Block(vec![
@@ -354,30 +320,26 @@ impl Parser {
 
     fn while_stmt(&mut self) -> Result<Box<Stmt>, ParseError> {
         self.advance();
-        self.consume(
-            |t| t == &Token::LeftParen,
-            |t| format!("Expected '(' after 'while', found {:?}", t.token),
-        )?;
+        self.consume(Token::is(Token::LeftParen), |t| {
+            format!("Expected '(' after 'while', found {:?}", t.token)
+        })?;
         let condition = self.expression()?;
-        self.consume(
-            |t| t == &Token::RightParen,
-            |t| format!("Expected ')' after while condition, found {:?}", t.token),
-        )?;
+        self.consume(Token::is(Token::RightParen), |t| {
+            format!("Expected ')' after while condition, found {:?}", t.token)
+        })?;
         let body = self.statement()?;
         Ok(Box::new(Stmt::While { condition, body }))
     }
 
     fn if_stmt(&mut self) -> Result<Box<Stmt>, ParseError> {
         self.advance();
-        self.consume(
-            |t| t == &Token::LeftParen,
-            |t| format!("Expected '(' after 'if', found {:?}", t.token),
-        )?;
+        self.consume(Token::is(Token::LeftParen), |t| {
+            format!("Expected '(' after 'if', found {:?}", t.token)
+        })?;
         let condition = self.expression()?;
-        self.consume(
-            |t| t == &Token::RightParen,
-            |t| format!("Expected ')' after if condition, found {:?}", t.token),
-        )?;
+        self.consume(Token::is(Token::RightParen), |t| {
+            format!("Expected ')' after if condition, found {:?}", t.token)
+        })?;
         let then_branch = self.statement()?;
         let else_branch = match self.peek().token {
             Token::Else => {
@@ -395,15 +357,12 @@ impl Parser {
 
     fn expression_stmt(&mut self) -> Result<Box<Stmt>, ParseError> {
         let expr = self.expression()?;
-        self.consume(
-            |t| t == &Token::Semicolon,
-            |t: &TokenWithLocation| {
-                format!(
-                    "Expected ';' after expression, found {:?} instead.",
-                    t.token
-                )
-            },
-        )?;
+        self.consume(Token::is(Token::Semicolon), |t: &TokenWithLocation| {
+            format!(
+                "Expected ';' after expression, found {:?} instead.",
+                t.token
+            )
+        })?;
         Ok(Box::new(Stmt::Expression(expr)))
     }
 
@@ -413,10 +372,9 @@ impl Parser {
         while self.peek().token != Token::RightBrace && !self.is_at_end() {
             statements.push(self.declaration()?);
         }
-        self.consume(
-            |t| t == &Token::RightBrace,
-            |t| format!("Expected '}}', found {:?}", t),
-        )?;
+        self.consume(Token::is(Token::RightBrace), |t| {
+            format!("Expected '}}', found {:?}", t)
+        })?;
         Ok(statements)
     }
 
@@ -465,10 +423,9 @@ impl Parser {
             Token::Question => {
                 self.advance();
                 let left = self.expression()?;
-                self.consume(
-                    |t| t == &Token::Colon,
-                    |t| format!("Expect ':', found {:?}", t),
-                )?;
+                self.consume(Token::is(Token::Colon), |t| {
+                    format!("Expect ':', found {:?}", t)
+                })?;
                 let right = self.assignment()?;
                 Ok(Box::new(Expr::Ternary {
                     cond: expr,
@@ -541,13 +498,9 @@ impl Parser {
                 Token::Dot => {
                     self.advance();
                     let name = self
-                        .consume(
-                            |t| match t {
-                                Token::Identifier(_) => true,
-                                _ => false,
-                            },
-                            |_t| format!("Expected a property name after '.'."),
-                        )?
+                        .consume(Token::is_identifier, |_t| {
+                            format!("Expected a property name after '.'.")
+                        })?
                         .clone();
                     expr = Box::new(Expr::Get { expr, name });
                 }
@@ -572,10 +525,9 @@ impl Parser {
         }
 
         let paren = self
-            .consume(
-                |t| t == &Token::RightParen,
-                |t| format!("Expect ')' after arguments, found {:?}", t.token),
-            )?
+            .consume(Token::is(Token::RightParen), |t| {
+                format!("Expect ')' after arguments, found {:?}", t.token)
+            })?
             .clone();
 
         Ok(Box::new(Expr::Call {
@@ -597,10 +549,9 @@ impl Parser {
             Identifier(_) => Ok(Box::new(Expr::Variable(token))),
             LeftParen => {
                 let expr = self.expression()?;
-                self.consume(
-                    |t| t == &RightParen,
-                    |t: &TokenWithLocation| format!("Expected token ')', found {:?}", t.token),
-                )?;
+                self.consume(Token::is(RightParen), |t: &TokenWithLocation| {
+                    format!("Expected token ')', found {:?}", t.token)
+                })?;
                 Ok(Box::new(Expr::Grouping(expr, token.location.clone())))
             }
             This => Ok(Box::new(Expr::This(token))),

@@ -86,6 +86,17 @@ impl Token {
             _ => unreachable!(),
         }
     }
+
+    pub fn is_identifier(&self) -> bool {
+        match self {
+            Token::Identifier(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is(t: Token) -> impl FnOnce(&'_ Token) -> bool {
+        move |other| &t == other
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]

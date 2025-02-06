@@ -40,3 +40,24 @@ class Egotist {
 }
 var method = Egotist().speak;
 method(); // out: Egotist instance
+class Bar {
+    init() {
+        this.qux = "qux";
+        return;
+    }
+}
+var bar = Bar();
+bar.test = 1;
+print bar; // out: Bar instance
+print bar.qux; // out: qux
+print bar.test; // out: 1
+print Bar(); // out: Bar instance
+class Klass {
+    init(val1, val2) {
+        this.v1 = val1;
+        this.v2 = val2;
+    }
+}
+var k = Klass("foo", 123);
+print k.v1; // out: foo
+print k.v2; // out: 123

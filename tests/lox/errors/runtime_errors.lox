@@ -1,4 +1,14 @@
 1 + true;
+fun fn_with_params(p1, p2) {
+    print p1;
+    print p2;
+}
+fn_with_params(0);
+class Klass {}
+Klass(1, 5);
+// Failed to evaluate the expression of the statement: [at column 21 in line 5] Expected 2 arguments for function fn_with_params but got 3.
 // err: Failed to evaluate the expression of the statement: [at column 3 in line 1] Operands of binary operator Plus must be two numbers or one of them must be a string, but the following were passed:
 // err:     lhs: Number
 // err:     rhs: Bool
+// err: Failed to evaluate the expression of the statement: [at column 17 in line 6] Expected 2 arguments for function fn_with_params but got 1.
+// err: Failed to evaluate the expression of the statement: [at column 11 in line 8] Expected 0 arguments for function Klass but got 2.

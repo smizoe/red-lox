@@ -10,7 +10,7 @@ use crate::{expr::Value, Interpreter};
 pub enum Action {
     Print(Value),
     Eval(Value),
-    Return(Value),
+    Return(Option<Value>),
     Break,
 }
 
@@ -133,9 +133,13 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                 let mut guard = self.enter();
                 guard.execute_block(stmts)
             }
-            Stmt::Return(_t, v) => Ok(Action::Return(
-                self.evaluate_expr(v).map_err(Error::ExprEvalError)?,
-            )),
+            Stmt::Return(_t, expr) => match expr {
+                None => Ok(Action::Return(None)),
+                Some(expr) => self
+                    .evaluate_expr(expr)
+                    .map(|v| Action::Return(Some(v)))
+                    .map_err(Error::ExprEvalError),
+            },
             Stmt::Break => Ok(Action::Break),
         }
     }

@@ -101,9 +101,20 @@ impl Callable {
             .map_err(|e| match e {
                 stmt::Error::ExprEvalError(e) => e,
             })
-            .map(|action| match action {
-                Action::Return(v) => v,
-                _ => Value::Nil,
+            .and_then(|action| {
+                if self.is_initializer {
+                    return self.closure.get_at(
+                        0,
+                        &TokenWithLocation {
+                            token: Token::This,
+                            location: Location { line: 0, column: 0 },
+                        },
+                    );
+                }
+                match action {
+                    Action::Return(Some(v)) => Ok(v),
+                    _ => Ok(Value::Nil),
+                }
             })
     }
 }

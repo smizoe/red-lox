@@ -25,5 +25,5 @@ pub enum Stmt {
         body: Box<Stmt>,
     },
     Break,
-    Return(TokenWithLocation, Box<Expr>),
+    Return(TokenWithLocation, Option<Box<Expr>>),
 }

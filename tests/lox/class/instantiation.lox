@@ -22,3 +22,21 @@ class Cake {
 var cake = Cake();
 cake.flavor = "German chocolate";
 cake.taste(); // out: The German chocolate cake is delicious!
+class Foo {
+    init() {
+        print this;
+    }
+}
+var foo = Foo();
+print foo.init();
+// out: Foo instance
+// out: Foo instance
+// out: Foo instance
+// the third one is because init() returns this
+class Egotist {
+    speak() {
+        print this;
+    }
+}
+var method = Egotist().speak;
+method(); // out: Egotist instance

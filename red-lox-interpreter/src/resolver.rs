@@ -54,6 +54,8 @@ pub enum Error {
     UnusedLocalVariableError { name: String, location: Location },
     #[error("{} Keyword 'this' appeared outside of a class", .0)]
     ThisKeywordOutsideClassContextError(Location),
+    #[error("{} Cannot return a value from an initializer.", .0)]
+    ReturnValueFromInitializerError(Location),
 }
 
 struct ScopeGuard<'a, 'b, 'c, 'd> {
@@ -332,7 +334,14 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
                     self.errors.push(Error::TopLevelReturnError(token.clone()));
                     return;
                 }
-                self.resolve_expr(expr)
+                if let Some(e) = expr.as_ref() {
+                    if self.function_type == FunctionType::Initializer {
+                        self.errors.push(Error::ReturnValueFromInitializerError(
+                            token.location.clone(),
+                        ));
+                    }
+                    self.resolve_expr(e);
+                }
             }
         }
     }

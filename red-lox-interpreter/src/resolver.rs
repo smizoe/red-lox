@@ -56,6 +56,8 @@ pub enum Error {
     ThisKeywordOutsideClassContextError(Location),
     #[error("{} Cannot return a value from an initializer.", .0)]
     ReturnValueFromInitializerError(Location),
+    #[error("{} A class cannot inherit itself.", .0)]
+    InvalidInheritanceError(Location),
 }
 
 struct ScopeGuard<'a, 'b, 'c, 'd> {
@@ -290,10 +292,25 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
                 self.begin_function(FunctionType::Function)
                     .resolve_function(params, body);
             }
-            red_lox_ast::stmt::Stmt::Class { name, methods } => {
+            red_lox_ast::stmt::Stmt::Class {
+                name,
+                methods,
+                superclass,
+            } => {
                 let mut class_type_guard = self.begin_class(ClassType::Class);
                 class_type_guard.declare(name);
                 class_type_guard.define(name);
+                if let Some(expr) = superclass {
+                    match expr.as_ref() {
+                        red_lox_ast::expr::Expr::Variable(t) if t.token == name.token => {
+                            class_type_guard
+                                .errors
+                                .push(Error::InvalidInheritanceError(t.location.clone()));
+                        }
+                        _ => (),
+                    }
+                    class_type_guard.resolve_expr(expr);
+                }
 
                 let mut scope_guard = class_type_guard.begin_scope();
                 scope_guard.add_kwd_to_scope("this", name.location.clone());

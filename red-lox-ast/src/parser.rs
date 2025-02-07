@@ -127,6 +127,16 @@ impl Parser {
                 format!("Expected class name, found {:?}", t.token)
             })?
             .clone();
+        let mut superclass = None;
+        if self.peek().token == Token::Less {
+            self.advance();
+            let superclass_name = self
+                .consume(Token::is_identifier, |t| {
+                    format!("Expected a superclass name, found {:?}.", t.token)
+                })?
+                .clone();
+            superclass.replace(Box::new(Expr::Variable(superclass_name)));
+        }
         self.consume(Token::is(Token::LeftBrace), |t| {
             format!("Expected '{{' before class body, found {:?}", t.token)
         })?;
@@ -138,7 +148,11 @@ impl Parser {
         self.consume(Token::is(Token::RightBrace), |t| {
             format!("Expected '}}' after class body, found {:?}", t.token)
         })?;
-        Ok(Box::new(Stmt::Class { name, methods }))
+        Ok(Box::new(Stmt::Class {
+            name,
+            methods,
+            superclass,
+        }))
     }
 
     fn function(&mut self, kind: &str) -> Result<Box<Stmt>, ParseError> {

@@ -31,12 +31,170 @@ pub enum Value {
     Class {
         name: String,
         methods: Rc<HashMap<String, Value>>,
+        superclass: Option<Rc<Value>>,
     },
     Instance {
-        class_name: String,
-        methods: Rc<HashMap<String, Value>>,
+        class: Rc<Value>,
         fields: Rc<RefCell<HashMap<String, Value>>>,
     },
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::String(l0), Self::String(r0)) => l0 == r0,
+            (Self::Number(l0), Self::Number(r0)) => l0 == r0,
+            (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
+            (Self::NativeFn { name: l_name, .. }, Self::NativeFn { name: r_name, .. }) => {
+                l_name == r_name
+            }
+            (Self::Function { name: l_name, .. }, Self::Function { name: r_name, .. }) => {
+                l_name == r_name
+            }
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
+}
+
+impl std::fmt::Debug for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Nil => write!(f, "Nil"),
+            Self::String(arg0) => f.debug_tuple("String").field(arg0).finish(),
+            Self::Number(arg0) => f.debug_tuple("Number").field(arg0).finish(),
+            Self::Bool(arg0) => f.debug_tuple("Bool").field(arg0).finish(),
+            Self::NativeFn { name, .. } => f
+                .debug_struct("NativeFn")
+                .field("name", name)
+                .field("fun", &format_args!("_native_fn_"))
+                .finish(),
+            Self::Function {
+                name,
+                callable: Callable { params, .. },
+                ..
+            } => f
+                .debug_struct("Function")
+                .field("name", name)
+                .field("body", &format_args!("_function_body_"))
+                .field("params", params)
+                .finish(),
+            Self::Class { name, .. } => f.debug_struct("Class").field("name", name).finish(),
+            Self::Instance { class, fields } => {
+                fn join_by_comma<S, I>(mut it: I) -> String
+                where
+                    S: AsRef<str>,
+                    I: Iterator<Item = S>,
+                {
+                    let mut joined = String::new();
+                    if let Some(s) = it.next() {
+                        joined.push_str(s.as_ref());
+                    }
+                    for item in it {
+                        joined.push_str(", ");
+                        joined.push_str(item.as_ref());
+                    }
+                    joined
+                }
+                match class.as_ref() {
+                    Value::Class {
+                        name,
+                        methods,
+                        superclass: _,
+                    } => {
+                        let method_names = join_by_comma(methods.keys());
+                        let field_names = join_by_comma(fields.borrow().keys());
+                        f.debug_struct("Instance")
+                            .field("class_name", name)
+                            .field("methods", &method_names)
+                            .field("fields", &field_names)
+                            .finish()
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+    }
+}
+
+impl Value {
+    pub fn is_truthy(&self) -> bool {
+        match self {
+            Value::Nil => false,
+            Value::Bool(b) => *b,
+            Value::Number(_) | Value::String(_) => true,
+            Value::NativeFn { .. }
+            | Value::Function { .. }
+            | Value::Class { .. }
+            | Value::Instance { .. } => true,
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        use Value::*;
+        match self {
+            Nil => std::string::String::new(),
+            String(s) => s.clone(),
+            Number(v) => v.to_string(),
+            Bool(b) => b.to_string(),
+            NativeFn { name, .. } => format!("<native fn {}>", name),
+            Function { name, .. } => format!("<fn {}>", name),
+            Class { name, .. } => format!("<class {}>", name),
+            Instance { class, .. } => match class.as_ref() {
+                Class { name, .. } => {
+                    format!("{} instance", name)
+                }
+                _ => unreachable!(),
+            },
+        }
+    }
+
+    pub fn to_type_str(&self) -> &'static str {
+        use Value::*;
+        match self {
+            Nil => "Nil",
+            String(_) => "String",
+            Number(_) => "Number",
+            Bool(_) => "Bool",
+            NativeFn { .. } => "NativeFn",
+            Function { .. } => "Function",
+            Class { .. } => "Class",
+            Instance { .. } => "Instance",
+        }
+    }
+
+    pub fn find_method(&self, method_name: &'_ str) -> Option<Value> {
+        use Value::*;
+        match self {
+            Class {
+                name: _,
+                methods,
+                superclass,
+            } => {
+                if let Some(method) = methods.get(method_name) {
+                    return Some(method.clone());
+                }
+                if let Some(superclass) = superclass {
+                    return superclass.find_method(method_name);
+                }
+                None
+            }
+            Instance { class, .. } => class.find_method(method_name),
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use Value::*;
+        match self {
+            Nil => write!(f, "nil"),
+            String(s) => write!(f, "{}", s),
+            Number(v) => write!(f, "{}", v),
+            Bool(b) => write!(f, "{}", b),
+            _ => write!(f, "{}", self.to_string()),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -100,6 +258,7 @@ impl Callable {
             .execute_block(&self.body)
             .map_err(|e| match e {
                 stmt::Error::ExprEvalError(e) => e,
+                _ => unreachable!(),
             })
             .and_then(|action| {
                 if self.is_initializer {
@@ -116,133 +275,6 @@ impl Callable {
                     _ => Ok(Value::Nil),
                 }
             })
-    }
-}
-
-impl PartialEq for Value {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::String(l0), Self::String(r0)) => l0 == r0,
-            (Self::Number(l0), Self::Number(r0)) => l0 == r0,
-            (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
-            (Self::NativeFn { name: l_name, .. }, Self::NativeFn { name: r_name, .. }) => {
-                l_name == r_name
-            }
-            (Self::Function { name: l_name, .. }, Self::Function { name: r_name, .. }) => {
-                l_name == r_name
-            }
-            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
-        }
-    }
-}
-
-impl std::fmt::Debug for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Nil => write!(f, "Nil"),
-            Self::String(arg0) => f.debug_tuple("String").field(arg0).finish(),
-            Self::Number(arg0) => f.debug_tuple("Number").field(arg0).finish(),
-            Self::Bool(arg0) => f.debug_tuple("Bool").field(arg0).finish(),
-            Self::NativeFn { name, .. } => f
-                .debug_struct("NativeFn")
-                .field("name", name)
-                .field("fun", &format_args!("_native_fn_"))
-                .finish(),
-            Self::Function {
-                name,
-                callable: Callable { params, .. },
-                ..
-            } => f
-                .debug_struct("Function")
-                .field("name", name)
-                .field("body", &format_args!("_function_body_"))
-                .field("params", params)
-                .finish(),
-            Self::Class { name, .. } => f.debug_struct("Class").field("name", name).finish(),
-            Self::Instance {
-                class_name,
-                methods,
-                fields,
-            } => {
-                fn join_by_comma<S, I>(mut it: I) -> String
-                where
-                    S: AsRef<str>,
-                    I: Iterator<Item = S>,
-                {
-                    let mut joined = String::new();
-                    if let Some(s) = it.next() {
-                        joined.push_str(s.as_ref());
-                    }
-                    for item in it {
-                        joined.push_str(", ");
-                        joined.push_str(item.as_ref());
-                    }
-                    joined
-                }
-                let method_names = join_by_comma(methods.keys());
-                let field_names = join_by_comma(fields.borrow().keys());
-                f.debug_struct("Instance")
-                    .field("class_name", class_name)
-                    .field("methods", &method_names)
-                    .field("fields", &field_names)
-                    .finish()
-            }
-        }
-    }
-}
-
-impl Value {
-    pub fn is_truthy(&self) -> bool {
-        match self {
-            Value::Nil => false,
-            Value::Bool(b) => *b,
-            Value::Number(_) | Value::String(_) => true,
-            Value::NativeFn { .. }
-            | Value::Function { .. }
-            | Value::Class { .. }
-            | Value::Instance { .. } => true,
-        }
-    }
-
-    pub fn to_string(&self) -> String {
-        use Value::*;
-        match self {
-            Nil => std::string::String::new(),
-            String(s) => s.clone(),
-            Number(v) => v.to_string(),
-            Bool(b) => b.to_string(),
-            NativeFn { name, .. } => format!("<native fn {}>", name),
-            Function { name, .. } => format!("<fn {}>", name),
-            Class { name, .. } => format!("<class {}>", name),
-            Instance { class_name, .. } => format!("{} instance", class_name),
-        }
-    }
-
-    pub fn to_type_str(&self) -> &'static str {
-        use Value::*;
-        match self {
-            Nil => "Nil",
-            String(_) => "String",
-            Number(_) => "Number",
-            Bool(_) => "Bool",
-            NativeFn { .. } => "NativeFn",
-            Function { .. } => "Function",
-            Class { .. } => "Class",
-            Instance { .. } => "Instance",
-        }
-    }
-}
-
-impl Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use Value::*;
-        match self {
-            Nil => write!(f, "nil"),
-            String(s) => write!(f, "{}", s),
-            Number(v) => write!(f, "{}", v),
-            Bool(b) => write!(f, "{}", b),
-            _ => write!(f, "{}", self.to_string()),
-        }
     }
 }
 
@@ -424,22 +456,17 @@ impl<'a, 'b> Interpreter<'a, 'b> {
             Get { expr, name } => {
                 let obj = self.evaluate_expr(expr)?;
                 match obj {
-                    Value::Instance {
-                        class_name,
-                        methods,
-                        fields,
-                    } => {
+                    Value::Instance { class, fields } => {
                         if let Some(v) = fields.borrow().get(name.token.id_name()) {
                             return Ok(v.clone());
                         }
-                        if let Some(m) = methods.get(name.token.id_name()) {
+                        if let Some(m) = class.find_method(name.token.id_name()) {
                             match m {
                                 Value::Function { name, callable } => {
                                     return Ok(Value::Function {
                                         name: name.clone(),
                                         callable: callable.bind(Value::Instance {
-                                            class_name: class_name,
-                                            methods: methods.clone(),
+                                            class,
                                             fields: fields,
                                         }),
                                     });
@@ -461,11 +488,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
             Set { lhs, name, rhs } => {
                 let obj = self.evaluate_expr(&lhs)?;
                 match obj {
-                    Value::Instance {
-                        class_name: _,
-                        methods: _,
-                        fields,
-                    } => {
+                    Value::Instance { fields, .. } => {
                         let value = self.evaluate_expr(rhs)?;
                         fields
                             .borrow_mut()
@@ -504,18 +527,25 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                     Value::Function { name, callable } => {
                         callable.call(self, &name, paren.location.clone(), args)
                     }
-                    Value::Class { ref name, methods } => {
+                    Value::Class {
+                        name,
+                        methods,
+                        superclass,
+                    } => {
                         let instance = Value::Instance {
-                            class_name: name.clone(),
-                            methods: methods.clone(),
+                            class: Rc::new(Value::Class {
+                                name: name.clone(),
+                                methods,
+                                superclass,
+                            }),
                             fields: Rc::new(RefCell::new(HashMap::new())),
                         };
-                        match methods.get("init").cloned() {
+                        match instance.find_method("init") {
                             Some(init) => match init {
                                 Value::Function { callable, .. } => {
                                     return callable.bind(instance.clone()).call(
                                         self,
-                                        name,
+                                        &name,
                                         paren.location.clone(),
                                         args,
                                     )

@@ -14,6 +14,7 @@ pub enum Stmt {
     Class {
         name: TokenWithLocation,
         methods: Vec<Box<Stmt>>,
+        superclass: Option<Box<Expr>>,
     },
     If {
         condition: Box<Expr>,
@@ -27,3 +28,24 @@ pub enum Stmt {
     Break,
     Return(TokenWithLocation, Option<Box<Expr>>),
 }
+
+//impl Stmt {
+//    pub fn find_method<'a, 'b>(&self, name: &'b str) -> Option<&'a Box<Stmt>> {
+//        use Stmt::*;
+//        let mut cls = self;
+//        loop {
+//            match cls {
+//                Class {
+//                    name: _,
+//                    methods,
+//                    superclass,
+//                } => {
+//                    if let Some(m) = methods.get(name) {
+//
+//                    }
+//                }
+//                _ => unreachable!(),
+//            }
+//        }
+//    }
+//}

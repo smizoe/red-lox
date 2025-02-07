@@ -18,6 +18,8 @@ pub enum Action {
 pub enum Error {
     #[error("Failed to evaluate the expression of the statement: {}", .0)]
     ExprEvalError(expr::Error),
+    #[error("Superclass must be a class, but found {}", .0.to_string())]
+    InvalidSuperclassTypeError(Value),
 }
 
 impl<'a, 'b> Interpreter<'a, 'b> {
@@ -77,7 +79,23 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                 );
                 Ok(Action::Eval(Value::Nil))
             }
-            Stmt::Class { name, methods } => {
+            Stmt::Class {
+                name,
+                methods,
+                superclass,
+            } => {
+                let mut supercls = None;
+                if let Some(expr) = superclass {
+                    let val = self.evaluate_expr(expr).map_err(Error::ExprEvalError)?;
+                    match val {
+                        Value::Class { .. } => {
+                            supercls.replace(val);
+                        }
+                        _ => {
+                            return Err(Error::InvalidSuperclassTypeError(val));
+                        }
+                    }
+                }
                 self.environment
                     .define(name.token.id_name().to_string(), Value::Nil);
                 let mut method_map = HashMap::new();
@@ -110,6 +128,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                         Value::Class {
                             name: name.token.id_name().to_string(),
                             methods: Rc::new(method_map),
+                            superclass: supercls.map(Rc::new),
                         },
                     )
                     .map(|v| Action::Eval(v))

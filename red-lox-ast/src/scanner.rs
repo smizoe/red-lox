@@ -6,6 +6,14 @@ use std::{
 };
 use thiserror::Error;
 
+// line: 0 is invalid as a token's location, and thus is useful
+// in providing this/super's location value stored in Interpreter::locals
+pub const THIS_LOCATION: Location = Location { line: 0, column: 0 };
+pub const SUPER_LOCATION: Location = Location { line: 0, column: 1 };
+
+pub const SUPER: &str = "super";
+pub const THIS: &str = "this";
+
 const KEYWORDS: phf::Map<&'static [u8], Token> = phf_map! {
     b"and" => Token::And,
     b"class" => Token::Class,
@@ -82,7 +90,8 @@ impl Token {
     pub fn id_name(&self) -> &str {
         match self {
             Token::Identifier(n) => n,
-            Token::This => "this",
+            Token::This => THIS,
+            Token::Super => SUPER,
             _ => unreachable!(),
         }
     }

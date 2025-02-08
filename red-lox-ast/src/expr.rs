@@ -47,4 +47,8 @@ pub enum Expr {
         rhs: Box<Expr>,
     },
     This(TokenWithLocation),
+    Super {
+        keyword: TokenWithLocation,
+        method: TokenWithLocation,
+    },
 }

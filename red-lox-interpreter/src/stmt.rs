@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use red_lox_ast::scanner::SUPER;
 use red_lox_ast::{scanner::Token, stmt::Stmt};
 
 use crate::expr::{self, Callable};
@@ -98,30 +99,14 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                 }
                 self.environment
                     .define(name.token.id_name().to_string(), Value::Nil);
-                let mut method_map = HashMap::new();
-                for method in methods {
-                    match method.as_ref() {
-                        Stmt::Function { name, params, body } => {
-                            method_map.insert(
-                                name.token.id_name().to_string(),
-                                Value::Function {
-                                    name: match &name.token {
-                                        Token::Identifier(n) => n.clone(),
-                                        _ => unreachable!(),
-                                    },
-                                    callable: Callable::new(
-                                        body.clone(),
-                                        params.clone(),
-                                        self.environment.clone(),
-                                        name.token.id_name() == "init",
-                                    ),
-                                },
-                            );
-                        }
-
-                        _ => unreachable!(),
+                let method_map = match supercls.clone() {
+                    Some(c) => {
+                        let mut with_super = self.enter();
+                        with_super.environment.define(SUPER.to_string(), c);
+                        with_super.evaluate_methods(methods)
                     }
-                }
+                    None => self.evaluate_methods(methods),
+                };
                 self.environment
                     .assign(
                         name,
@@ -161,5 +146,33 @@ impl<'a, 'b> Interpreter<'a, 'b> {
             },
             Stmt::Break => Ok(Action::Break),
         }
+    }
+
+    fn evaluate_methods(&mut self, methods: &Vec<Box<Stmt>>) -> HashMap<String, Value> {
+        let mut method_map = HashMap::new();
+        for method in methods {
+            match method.as_ref() {
+                Stmt::Function { name, params, body } => {
+                    method_map.insert(
+                        name.token.id_name().to_string(),
+                        Value::Function {
+                            name: match &name.token {
+                                Token::Identifier(n) => n.clone(),
+                                _ => unreachable!(),
+                            },
+                            callable: Callable::new(
+                                body.clone(),
+                                params.clone(),
+                                self.environment.clone(),
+                                name.token.id_name() == "init",
+                            ),
+                        },
+                    );
+                }
+
+                _ => unreachable!(),
+            }
+        }
+        method_map
     }
 }

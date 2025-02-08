@@ -3,7 +3,9 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use red_lox_ast::scanner::{Location, TokenWithLocation};
+use red_lox_ast::scanner::{
+    Location, TokenWithLocation, SUPER, SUPER_LOCATION, THIS, THIS_LOCATION,
+};
 
 use crate::Interpreter;
 
@@ -40,6 +42,7 @@ enum FunctionType {
 enum ClassType {
     None,
     Class,
+    Subclass,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -58,6 +61,10 @@ pub enum Error {
     ReturnValueFromInitializerError(Location),
     #[error("{} A class cannot inherit itself.", .0)]
     InvalidInheritanceError(Location),
+    #[error("{} Cannot use super outside of a class", .0)]
+    SuperKeywordOutsideClassContextError(Location),
+    #[error("{} Cannot use super in a class with no superclass", .0)]
+    SuperKeywordInClassWithoutSuperclassError(Location),
 }
 
 struct ScopeGuard<'a, 'b, 'c, 'd> {
@@ -300,34 +307,26 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
                 let mut class_type_guard = self.begin_class(ClassType::Class);
                 class_type_guard.declare(name);
                 class_type_guard.define(name);
-                if let Some(expr) = superclass {
-                    match expr.as_ref() {
-                        red_lox_ast::expr::Expr::Variable(t) if t.token == name.token => {
-                            class_type_guard
-                                .errors
-                                .push(Error::InvalidInheritanceError(t.location.clone()));
+                match superclass {
+                    Some(expr) => {
+                        match expr.as_ref() {
+                            red_lox_ast::expr::Expr::Variable(t) if t.token == name.token => {
+                                class_type_guard
+                                    .errors
+                                    .push(Error::InvalidInheritanceError(t.location.clone()));
+                            }
+                            _ => (),
                         }
-                        _ => (),
+                        let mut subclass_type_guard =
+                            class_type_guard.begin_class(ClassType::Subclass);
+                        subclass_type_guard.resolve_expr(expr);
+                        let mut scope_with_super = subclass_type_guard.begin_scope();
+                        scope_with_super.add_kwd_to_scope(SUPER, SUPER_LOCATION.clone());
+                        scope_with_super.resolve_methods(methods);
                     }
-                    class_type_guard.resolve_expr(expr);
-                }
-
-                let mut scope_guard = class_type_guard.begin_scope();
-                scope_guard.add_kwd_to_scope("this", name.location.clone());
-                for method in methods {
-                    match method.as_ref() {
-                        red_lox_ast::stmt::Stmt::Function { name, params, body } => {
-                            let method_type = if name.token.id_name() == "init" {
-                                FunctionType::Initializer
-                            } else {
-                                FunctionType::Method
-                            };
-                            scope_guard
-                                .begin_function(method_type)
-                                .resolve_function(params, body);
-                        }
-                        _ => unreachable!(),
-                    };
+                    None => {
+                        class_type_guard.resolve_methods(methods);
+                    }
                 }
             }
             red_lox_ast::stmt::Stmt::If {
@@ -360,6 +359,27 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
                     self.resolve_expr(e);
                 }
             }
+        }
+    }
+
+    // Called only in Class { .. } branch of resolve_stmt
+    fn resolve_methods(&mut self, methods: &Vec<Box<red_lox_ast::stmt::Stmt>>) {
+        let mut scope_guard = self.begin_scope();
+        scope_guard.add_kwd_to_scope(THIS, THIS_LOCATION);
+        for method in methods {
+            match method.as_ref() {
+                red_lox_ast::stmt::Stmt::Function { name, params, body } => {
+                    let method_type = if name.token.id_name() == "init" {
+                        FunctionType::Initializer
+                    } else {
+                        FunctionType::Method
+                    };
+                    scope_guard
+                        .begin_function(method_type)
+                        .resolve_function(params, body);
+                }
+                _ => unreachable!(),
+            };
         }
     }
 
@@ -437,6 +457,24 @@ impl<'a, 'b, 'c> Resolver<'a, 'b, 'c> {
                     return;
                 }
                 self.resolve_local(t);
+            }
+            red_lox_ast::expr::Expr::Super { keyword, .. } => {
+                match self.class_type {
+                    ClassType::None => {
+                        self.errors
+                            .push(Error::SuperKeywordOutsideClassContextError(
+                                keyword.location.clone(),
+                            ))
+                    }
+                    ClassType::Class => {
+                        self.errors
+                            .push(Error::SuperKeywordInClassWithoutSuperclassError(
+                                keyword.location.clone(),
+                            ))
+                    }
+                    ClassType::Subclass => (),
+                }
+                self.resolve_local(keyword);
             }
             _ => (),
         }

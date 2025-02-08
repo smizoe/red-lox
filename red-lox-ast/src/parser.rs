@@ -573,6 +573,19 @@ impl Parser {
                 msg: "Eof reached while parsing an expression".to_string(),
                 location: token.location,
             }),
+            Super => {
+                self.consume(
+                    Token::is(Dot),
+                    |t| format! {"Expected '.' after super, found {:?}.", t.token},
+                )?;
+                let method = self.consume(Token::is_identifier, |t| {
+                    format!("Expected superclass method name, found {:?}.", t.token)
+                })?;
+                Ok(Box::new(Expr::Super {
+                    keyword: token,
+                    method: method.clone(),
+                }))
+            }
             _ => Err(ParseError {
                 msg: format!("Unexpected token {:?} found", token.token),
                 location: token.location,

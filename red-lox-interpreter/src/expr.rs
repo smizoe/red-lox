@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
 
 use red_lox_ast::{
     expr::Expr,
-    scanner::{Location, Token, TokenWithLocation},
+    scanner::{Location, Token, TokenWithLocation, THIS, THIS_LOCATION},
     stmt::Stmt,
 };
 
@@ -223,7 +223,7 @@ impl Callable {
 
     pub fn bind(&self, this: Value) -> Self {
         let with_this = Environment::new(self.closure.clone());
-        with_this.define("this".to_string(), this);
+        with_this.define(THIS.to_string(), this);
         Self {
             body: self.body.clone(),
             params: self.params.clone(),
@@ -502,6 +502,32 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                 }
             }
             This(t) => self.lookup_variable(t),
+            Super { keyword, method } => match self.locals.get(&keyword.location).cloned() {
+                Some(d) => {
+                    let superclass = self.environment.get_at(d, keyword)?;
+                    let this = self.environment.get_at(
+                        d - 1,
+                        &TokenWithLocation {
+                            token: Token::This,
+                            location: THIS_LOCATION.clone(),
+                        },
+                    )?;
+                    match superclass.find_method(method.token.id_name()) {
+                        None => Err(Error::UnknowPropertyAccessError {
+                            name: method.token.id_name().to_string(),
+                            location: method.location.clone(),
+                        }),
+                        Some(m) => match m {
+                            Value::Function { name, callable } => Ok(Value::Function {
+                                name,
+                                callable: callable.bind(this),
+                            }),
+                            _ => unreachable!(),
+                        },
+                    }
+                }
+                _ => unreachable!(),
+            },
             Call {
                 callee,
                 paren,

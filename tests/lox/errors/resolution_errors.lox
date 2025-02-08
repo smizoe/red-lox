@@ -15,6 +15,13 @@ fun this_outside_class() {
     this;
 }
 print this;
+class Eclair {
+    cook() {
+        super.cook();
+        print "Pipe full of crème pâtissière.";
+    }
+}
+super.test();
 // err: One or more errors occurred during resolving variables:
 // err: [at column 1 in line 1] Cannot return from top-level code.
 // err: [at column 9 in line 4] Already a variable with name 'a' in this scope.
@@ -24,3 +31,5 @@ print this;
 // err: [at column 13 in line 10] Varable 'a' is defined but unused.
 // err: [at column 5 in line 15] Keyword 'this' appeared outside of a class
 // err: [at column 7 in line 17] Keyword 'this' appeared outside of a class
+// err: [at column 9 in line 20] Cannot use super in a class with no superclass
+// err: [at column 1 in line 24] Cannot use super outside of a class

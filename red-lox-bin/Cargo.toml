@@ -1,0 +1,11 @@
+[package]
+name = "red-lox-bin"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+red-lox-ast = {workspace=true}
+red-lox-interpreter = {workspace=true}
+red-lox-compiler = {workspace=true}
+clap = {version="4.5.28", features=["derive"] }

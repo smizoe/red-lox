@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::{
     expr::Expr,
-    scanner::{Location, Token, TokenWithLocation},
+    scanner::{Location, Token, TokenWithLocation, IDENTIFIER_TOKEN},
     stmt::Stmt,
 };
 use thiserror::Error;
@@ -123,7 +123,7 @@ impl Parser {
 
     fn class(&mut self) -> Result<Box<Stmt>, ParseError> {
         let name = self
-            .consume(Token::is_identifier, |t| {
+            .consume(Token::is(IDENTIFIER_TOKEN.clone()), |t| {
                 format!("Expected class name, found {:?}", t.token)
             })?
             .clone();
@@ -131,7 +131,7 @@ impl Parser {
         if self.peek().token == Token::Less {
             self.advance();
             let superclass_name = self
-                .consume(Token::is_identifier, |t| {
+                .consume(Token::is(IDENTIFIER_TOKEN.clone()), |t| {
                     format!("Expected a superclass name, found {:?}.", t.token)
                 })?
                 .clone();
@@ -157,7 +157,7 @@ impl Parser {
 
     fn function(&mut self, kind: &str) -> Result<Box<Stmt>, ParseError> {
         let name = self
-            .consume(Token::is_identifier, |t| {
+            .consume(Token::is(IDENTIFIER_TOKEN.clone()), |t| {
                 format!("Expected {kind} name, found {:?}", t.token)
             })?
             .clone();
@@ -168,7 +168,7 @@ impl Parser {
         if self.peek().token != Token::RightParen {
             loop {
                 params.push(
-                    self.consume(Token::is_identifier, |t| {
+                    self.consume(Token::is(IDENTIFIER_TOKEN.clone()), |t| {
                         format!("Expected a parameter name, found {:?}", t.token)
                     })?
                     .clone(),
@@ -191,9 +191,10 @@ impl Parser {
 
     fn var_declaration(&mut self) -> Result<Box<Stmt>, ParseError> {
         let token = self
-            .consume(Token::is_identifier, |t: &TokenWithLocation| {
-                format!("Expected variable name, found {:?}", t.token)
-            })?
+            .consume(
+                Token::is(IDENTIFIER_TOKEN.clone()),
+                |t: &TokenWithLocation| format!("Expected variable name, found {:?}", t.token),
+            )?
             .clone();
         let expr = if self.peek().token == Token::Equal {
             self.advance();
@@ -512,7 +513,7 @@ impl Parser {
                 Token::Dot => {
                     self.advance();
                     let name = self
-                        .consume(Token::is_identifier, |_t| {
+                        .consume(Token::is(IDENTIFIER_TOKEN.clone()), |_t| {
                             format!("Expected a property name after '.'.")
                         })?
                         .clone();
@@ -578,7 +579,7 @@ impl Parser {
                     Token::is(Dot),
                     |t| format! {"Expected '.' after super, found {:?}.", t.token},
                 )?;
-                let method = self.consume(Token::is_identifier, |t| {
+                let method = self.consume(Token::is(IDENTIFIER_TOKEN.clone()), |t| {
                     format!("Expected superclass method name, found {:?}.", t.token)
                 })?;
                 Ok(Box::new(Expr::Super {

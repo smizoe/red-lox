@@ -28,6 +28,9 @@ impl<'a> VirtualMachine<'a> {
     }
 
     pub fn interpret(&mut self) -> Result<(), Error> {
+        if cfg!(debug_assertions) {
+            println!("== __execution_trace__ ==");
+        }
         loop {
             if cfg!(debug_assertions) {
                 self.print_stack();

@@ -86,6 +86,11 @@ pub enum Token {
     Eof,
 }
 
+// Token constants to be used to call std::mem::discriminant.
+pub const NUMBER_TOKEN: Token = Token::Number(0.0);
+pub const STRING_TOKEN: Token = Token::String(String::new());
+pub const IDENTIFIER_TOKEN: Token = Token::Identifier(String::new());
+
 impl Token {
     pub fn id_name(&self) -> &str {
         match self {
@@ -96,15 +101,8 @@ impl Token {
         }
     }
 
-    pub fn is_identifier(&self) -> bool {
-        match self {
-            Token::Identifier(_) => true,
-            _ => false,
-        }
-    }
-
     pub fn is(t: Token) -> impl FnOnce(&'_ Token) -> bool {
-        move |other| &t == other
+        move |other| std::mem::discriminant(&t) == std::mem::discriminant(other)
     }
 }
 
@@ -185,6 +183,20 @@ impl<'a> Scanner<'a> {
         result
     }
 
+    pub fn next_token(&mut self) -> Result<TokenWithLocation, TokenizationError> {
+        self.junk();
+        if self.is_at_end() {
+            return Ok(TokenWithLocation::new(
+                Token::Eof,
+                Location {
+                    line: self.line_no,
+                    column: self.char_no,
+                },
+            ));
+        }
+        self.scan_token()
+    }
+
     fn scan_token(&mut self) -> Result<TokenWithLocation, TokenizationError> {
         use Token::*;
 
@@ -252,7 +264,7 @@ impl<'a> Scanner<'a> {
         self.start = self.current;
     }
 
-    fn is_at_end(&self) -> bool {
+    pub fn is_at_end(&self) -> bool {
         self.text.len() <= self.current
     }
 

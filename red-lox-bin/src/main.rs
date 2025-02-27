@@ -4,14 +4,13 @@ use std::{
     process::ExitCode,
 };
 
-use anyhow;
 use clap::{Parser, Subcommand};
+
+use red_lox_compiler::command::{compile_and_run, run_vm_as_interpreter};
 use red_lox_interpreter::{
     command::{run_file, run_prompt},
     Interpreter,
 };
-
-use red_lox_compiler::{chunk::Chunk, instruction::Instruction, vm::VirtualMachine};
 
 #[derive(Debug, Parser)]
 #[command(arg_required_else_help(true))]
@@ -23,17 +22,14 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Command {
     Interpreter { file_name: Option<String> },
-    Compiler {},
+    Compiler { file_name: Option<String> },
 }
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match &cli.command {
         Command::Interpreter { file_name } => run_interpreter(file_name.as_ref()),
-        Command::Compiler {} => match run_compiler() {
-            Ok(()) => ExitCode::SUCCESS,
-            _ => ExitCode::FAILURE,
-        },
+        Command::Compiler { file_name } => run_compiler(file_name.as_ref()),
     }
 }
 
@@ -61,16 +57,29 @@ where
     }
 }
 
-fn run_compiler() -> anyhow::Result<()> {
-    let mut chunk = Chunk::new();
-    chunk.write(&Instruction::Constant(1.2), 123)?;
-    chunk.write(&Instruction::Constant(3.4), 123)?;
-    chunk.write(&Instruction::Add, 123)?;
-    chunk.write(&Instruction::Constant(5.6), 123)?;
-    chunk.write(&Instruction::Divide, 123)?;
-    chunk.write(&Instruction::Negate, 123)?;
-    chunk.write(&Instruction::Return, 123)?;
-    let mut vm = VirtualMachine::new(&chunk);
-    vm.interpret()?;
-    Ok(())
+fn run_compiler<S>(file_name: Option<S>) -> ExitCode
+where
+    S: AsRef<str>,
+{
+    match file_name {
+        None => match run_vm_as_interpreter() {
+            Ok(()) => ExitCode::SUCCESS,
+            _ => ExitCode::FAILURE,
+        },
+        Some(name) => match compile_and_run(name.as_ref()) {
+            Ok(()) => ExitCode::SUCCESS,
+            _ => ExitCode::FAILURE,
+        },
+    }
+    //let mut chunk = Chunk::new();
+    //chunk.write(&Instruction::Constant(1.2), 123)?;
+    //chunk.write(&Instruction::Constant(3.4), 123)?;
+    //chunk.write(&Instruction::Add, 123)?;
+    //chunk.write(&Instruction::Constant(5.6), 123)?;
+    //chunk.write(&Instruction::Divide, 123)?;
+    //chunk.write(&Instruction::Negate, 123)?;
+    //chunk.write(&Instruction::Return, 123)?;
+    //let mut vm = VirtualMachine::new(&chunk);
+    //vm.interpret()?;
+    //Ok(())
 }

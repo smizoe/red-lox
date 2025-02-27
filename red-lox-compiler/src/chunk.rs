@@ -16,8 +16,8 @@ struct LineInfo {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Failed to add a constant to the chunk: {}", .0)]
-    TooManyConstantsError(TryFromIntError),
+    #[error("Failed to add a constant to the chunk since # of constants exeeded the range represented by u8.")]
+    TooManyConstantsError,
 }
 
 impl Chunk {
@@ -40,7 +40,7 @@ impl Chunk {
             Instruction::Divide => self.code.push(OpCode::Divide.into()),
             Instruction::Constant(v) => {
                 let index =
-                    u8::try_from(self.constants.len()).map_err(Error::TooManyConstantsError)?;
+                    u8::try_from(self.constants.len()).map_err(|_| Error::TooManyConstantsError)?;
                 self.constants.push(*v);
                 self.code.push(OpCode::Constant.into());
                 self.code.push(index);

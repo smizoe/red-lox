@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 thiserror = {workspace=true}
 red-lox-ast = {workspace=true}
-anyhow = "1.0.95"
+anyhow = {workspace=true}
 
 [dev-dependencies]
 lazy_static = "1.5.0"

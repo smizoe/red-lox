@@ -6,11 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [workspace]
-members = ["red-lox-ast", "red-lox-interpreter", "red-lox-compiler", "red-lox-bin"]
+members = ["red-lox-ast", "red-lox-interpreter", "red-lox-compiler", "red-lox-command"]
 
 [workspace.dependencies]
 red-lox-ast = {path = "red-lox-ast"}
-red-lox-bin = {path = "red-lox-bin"}
+red-lox-command = {path = "red-lox-command"}
 red-lox-interpreter = {path = "red-lox-interpreter"}
 red-lox-compiler = {path = "red-lox-compiler"}
 thiserror = "2.0.9"
@@ -21,12 +21,12 @@ googletest = "0.13.0"
 
 [[bin]]
 name = "red-lox"
-path = "red-lox-bin/src/main.rs"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = {workspace=true}
+clap = { version = "4.5.31", features = ["derive"] }
 red-lox-ast = {workspace=true}
-red-lox-bin = {workspace=true}
+red-lox-command = {workspace=true}
 red-lox-interpreter = {workspace=true}
 red-lox-compiler = {workspace=true}
-clap = { version = "4.5.31", features = ["derive"] }

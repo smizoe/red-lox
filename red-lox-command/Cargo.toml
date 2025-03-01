@@ -1,5 +1,5 @@
 [package]
-name = "red-lox-bin"
+name = "red-lox-command"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,3 +8,8 @@ red-lox-interpreter = {workspace=true}
 red-lox-compiler = {workspace=true}
 red-lox-ast = {workspace=true}
 anyhow = {workspace=true}
+
+[dev-dependencies]
+lazy_static = "1.5.0"
+regex = "1.11.1"
+rstest = {workspace=true}

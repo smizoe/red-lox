@@ -2,7 +2,6 @@ use std::path::Path;
 use std::{io::Cursor, path::PathBuf};
 
 use lazy_static::lazy_static;
-use red_lox_interpreter::Interpreter;
 use regex::Regex;
 use rstest::rstest;
 use std::fs::File;
@@ -10,14 +9,14 @@ use std::io::Read;
 
 #[rstest]
 fn test_lox_interpreter(#[files("../tests/lox/**/*.lox")] path: PathBuf) {
-    use red_lox_interpreter::command::run_file;
+    use red_lox_command::interpreter::run_interpreter;
 
     let mut out = Cursor::new(Vec::new());
     let mut err = Cursor::new(Vec::new());
-    let mut interpreter = Interpreter::new(&mut out, &mut err);
-    let _ = run_file(&path, &mut interpreter);
-
     let expected_output = ExpectedOutput::new(&path);
+
+    let _ = run_interpreter(Some(path), &mut out, &mut err);
+
     let out_lines = String::from_utf8(out.into_inner())
         .unwrap()
         .lines()

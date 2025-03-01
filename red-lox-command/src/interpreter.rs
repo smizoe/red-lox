@@ -1,33 +1,31 @@
 use std::{
     fs::File,
-    io::{stderr, stdin, stdout, Read, Write},
-    path::Path, process::ExitCode,
+    io::{stdin, stdout, Read, Write},
+    path::Path,
+    process::ExitCode,
 };
 
 use red_lox_ast::{parser::Parser, scanner::Scanner};
 use red_lox_interpreter::{resolver::Resolver, Interpreter};
 
-pub fn run_interpreter<S>(file_name: Option<S>) -> ExitCode
+pub fn run_interpreter<S, O, E>(file_name: Option<S>, out: &mut O, err: &mut E) -> ExitCode
 where
-    S: AsRef<str>,
+    S: AsRef<Path>,
+    O: std::io::Write,
+    E: std::io::Write,
 {
     match file_name {
-        None => match run_prompt(&mut Interpreter::new(&mut stdout(), &mut stderr())) {
+        None => match run_prompt(&mut Interpreter::new(out, err)) {
             Ok(_) => ExitCode::SUCCESS,
             Err(_) => ExitCode::FAILURE,
         },
-        Some(file_name) => {
-            match run_file(
-                Path::new(file_name.as_ref()),
-                &mut Interpreter::new(&mut stdout(), &mut stderr()),
-            ) {
-                Ok(_) => ExitCode::SUCCESS,
-                Err(e) => {
-                    eprintln!("One or more errors occurred: {:}", e);
-                    ExitCode::FAILURE
-                }
+        Some(file_name) => match run_file(file_name.as_ref(), &mut Interpreter::new(out, err)) {
+            Ok(_) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("One or more errors occurred: {:}", e);
+                ExitCode::FAILURE
             }
-        }
+        },
     }
 }
 

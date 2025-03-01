@@ -1,12 +1,11 @@
 use std::{
-    fs::File,
-    io::{stdin, stdout, Read, Write}, process::ExitCode,
+    fs::File, io::{stdin, stdout, Read, Write}, path::Path, process::ExitCode
 };
 
 use anyhow::anyhow;
 use red_lox_compiler::{compiler::Compiler, debug::disassemble_chunk, vm::VirtualMachine};
 
-fn compile_and_run_file(file_name: &str) -> anyhow::Result<()> {
+fn compile_and_run_file(file_name: &Path) -> anyhow::Result<()> {
     let mut file = File::open(file_name)?;
     let mut s = String::new();
     file.read_to_string(&mut s)?;
@@ -50,10 +49,11 @@ fn compile_and_run(code: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-
-pub fn run_compiler<S>(file_name: Option<S>) -> ExitCode
+pub fn run_compiler<S, O, E>(file_name: Option<S>, out: &mut O, err: &mut E) -> ExitCode
 where
-    S: AsRef<str>,
+    S: AsRef<Path>,
+    O: std::io::Write,
+    E: std::io::Write,
 {
     match file_name {
         None => match run_vm_as_interpreter() {

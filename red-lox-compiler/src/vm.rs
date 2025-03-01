@@ -1,12 +1,16 @@
+use std::io::Write;
+
 use crate::{chunk::Chunk, debug::disassemble_instruction, op_code::OpCode};
 
 const STACK_MAX: usize = 256;
 
-pub struct VirtualMachine<'a> {
+pub struct VirtualMachine<'a, 'b, 'c> {
     chunk: &'a Chunk,
     ip: usize,
     stack: [f64; STACK_MAX],
     stack_top: usize,
+    out: &'b mut dyn Write,
+    err: &'c mut dyn Write,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -17,13 +21,15 @@ pub enum Error {
     RuntimeOperationConversionError(crate::op_code::ConversionError),
 }
 
-impl<'a> VirtualMachine<'a> {
-    pub fn new(chunk: &'a Chunk) -> Self {
+impl<'a, 'b, 'c> VirtualMachine<'a, 'b, 'c> {
+    pub fn new(chunk: &'a Chunk, out: &'b mut dyn Write, err: &'c mut dyn Write) -> Self {
         Self {
             chunk,
             ip: 0,
             stack: [0.0; STACK_MAX],
             stack_top: 0,
+            out,
+            err,
         }
     }
 
@@ -48,7 +54,8 @@ impl<'a> VirtualMachine<'a> {
                     self.push(-v);
                 }
                 OpCode::Return => {
-                    println!("{}", self.pop());
+                    let v = self.pop();
+                    writeln!(self.out, "{}", v).expect("Failed to write to output.");
                     return Ok(());
                 }
                 OpCode::Add => {

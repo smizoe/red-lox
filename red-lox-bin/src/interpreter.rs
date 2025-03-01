@@ -1,20 +1,44 @@
 use std::{
     fs::File,
-    io::{stdin, stdout, Read, Write},
-    path::Path,
+    io::{stderr, stdin, stdout, Read, Write},
+    path::Path, process::ExitCode,
 };
 
-use crate::{resolver::Resolver, Interpreter};
 use red_lox_ast::{parser::Parser, scanner::Scanner};
+use red_lox_interpreter::{resolver::Resolver, Interpreter};
 
-pub fn run_file(file_path: &Path, interpreter: &mut Interpreter) -> anyhow::Result<()> {
+pub fn run_interpreter<S>(file_name: Option<S>) -> ExitCode
+where
+    S: AsRef<str>,
+{
+    match file_name {
+        None => match run_prompt(&mut Interpreter::new(&mut stdout(), &mut stderr())) {
+            Ok(_) => ExitCode::SUCCESS,
+            Err(_) => ExitCode::FAILURE,
+        },
+        Some(file_name) => {
+            match run_file(
+                Path::new(file_name.as_ref()),
+                &mut Interpreter::new(&mut stdout(), &mut stderr()),
+            ) {
+                Ok(_) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("One or more errors occurred: {:}", e);
+                    ExitCode::FAILURE
+                }
+            }
+        }
+    }
+}
+
+fn run_file(file_path: &Path, interpreter: &mut Interpreter) -> anyhow::Result<()> {
     let mut file = File::open(file_path)?;
     let mut s = String::new();
     file.read_to_string(&mut s)?;
     run(interpreter, &s)
 }
 
-pub fn run_prompt(interpreter: &mut Interpreter) -> anyhow::Result<()> {
+fn run_prompt(interpreter: &mut Interpreter) -> anyhow::Result<()> {
     let mut line = String::new();
     loop {
         print!("> ");
@@ -35,11 +59,11 @@ fn run(interpreter: &mut Interpreter, prog: &str) -> anyhow::Result<()> {
     let result = scanner.scan_tokens();
     if !result.errors.is_empty() {
         writeln!(
-            interpreter.out,
+            interpreter.out(),
             "One or more errors occurred during tokenization:"
         )?;
         for e in result.errors.iter() {
-            writeln!(interpreter.out, "{}", e)?;
+            writeln!(interpreter.out(), "{}", e)?;
         }
         return Err(anyhow::anyhow!("Tokenization Error"));
     }
@@ -47,11 +71,11 @@ fn run(interpreter: &mut Interpreter, prog: &str) -> anyhow::Result<()> {
     let result = parser.parse();
     if !result.errors.is_empty() {
         writeln!(
-            interpreter.err,
+            interpreter.err(),
             "One or more errors occurred during parsing the expression:"
         )?;
         for e in result.errors.iter() {
-            writeln!(interpreter.err, "{}", e)?;
+            writeln!(interpreter.err(), "{}", e)?;
         }
         return Err(anyhow::anyhow!("Parse Error"));
     }
@@ -59,13 +83,13 @@ fn run(interpreter: &mut Interpreter, prog: &str) -> anyhow::Result<()> {
     let mut resolver = Resolver::new(interpreter);
     if let Err(es) = resolver.resolve(&result.stmts) {
         writeln!(
-            interpreter.err,
+            interpreter.err(),
             "One or more errors occurred during resolving variables:"
         )?;
         for e in es {
-            writeln!(interpreter.err, "{}", e)?;
+            writeln!(interpreter.err(), "{}", e)?;
         }
-        return Err(anyhow::anyhow!("Resolution Error"))
+        return Err(anyhow::anyhow!("Resolution Error"));
     }
     interpreter.interpret(result.stmts);
     Ok(())

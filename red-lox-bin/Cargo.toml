@@ -3,3 +3,8 @@ name = "red-lox-bin"
 version = "0.1.0"
 edition = "2021"
 
+[dependencies]
+red-lox-interpreter = {workspace=true}
+red-lox-compiler = {workspace=true}
+red-lox-ast = {workspace=true}
+anyhow = {workspace=true}

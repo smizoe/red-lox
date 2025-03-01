@@ -1,8 +1,7 @@
-pub mod command;
 mod environment;
 mod expr;
 mod globals;
-mod resolver;
+pub mod resolver;
 mod stmt;
 
 use std::{
@@ -112,6 +111,14 @@ impl<'a, 'b> Interpreter<'a, 'b> {
             err,
             locals: HashMap::new(),
         }
+    }
+
+    pub fn out(&mut self) -> &mut dyn std::io::Write {
+        &mut self.out
+    }
+
+    pub fn err(&mut self) -> &mut dyn std::io::Write {
+        &mut self.err
     }
 
     pub fn interpret(&mut self, stmts: Vec<Box<Stmt>>) {

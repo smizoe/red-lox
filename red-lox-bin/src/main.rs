@@ -6,11 +6,8 @@ use std::{
 
 use clap::{Parser, Subcommand};
 
-use red_lox_compiler::command::{compile_and_run_file, run_vm_as_interpreter};
-use red_lox_interpreter::{
-    command::{run_file, run_prompt},
-    Interpreter,
-};
+use red_lox_bin::compiler::run_compiler;
+use red_lox_bin::interpreter::run_interpreter;
 
 #[derive(Debug, Parser)]
 #[command(arg_required_else_help(true))]
@@ -30,48 +27,5 @@ fn main() -> ExitCode {
     match &cli.command {
         Command::Interpreter { file_name } => run_interpreter(file_name.as_ref()),
         Command::Compiler { file_name } => run_compiler(file_name.as_ref()),
-    }
-}
-
-fn run_interpreter<S>(file_name: Option<S>) -> ExitCode
-where
-    S: AsRef<str>,
-{
-    match file_name {
-        None => match run_prompt(&mut Interpreter::new(&mut stdout(), &mut stderr())) {
-            Ok(_) => ExitCode::SUCCESS,
-            Err(_) => ExitCode::FAILURE,
-        },
-        Some(file_name) => {
-            match run_file(
-                Path::new(file_name.as_ref()),
-                &mut Interpreter::new(&mut stdout(), &mut stderr()),
-            ) {
-                Ok(_) => ExitCode::SUCCESS,
-                Err(e) => {
-                    eprintln!("One or more errors occurred: {:}", e);
-                    ExitCode::FAILURE
-                }
-            }
-        }
-    }
-}
-
-fn run_compiler<S>(file_name: Option<S>) -> ExitCode
-where
-    S: AsRef<str>,
-{
-    match file_name {
-        None => match run_vm_as_interpreter() {
-            Ok(()) => ExitCode::SUCCESS,
-            _ => ExitCode::FAILURE,
-        },
-        Some(name) => match compile_and_run_file(name.as_ref()) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(e) => {
-                eprintln!("{}", e);
-                ExitCode::FAILURE
-            }
-        },
     }
 }

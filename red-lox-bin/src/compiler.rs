@@ -1,12 +1,12 @@
 use std::{
     fs::File,
-    io::{stdin, stdout, Read, Write},
+    io::{stdin, stdout, Read, Write}, process::ExitCode,
 };
 
-use crate::{compiler::Compiler, debug::disassemble_chunk, vm::VirtualMachine};
 use anyhow::anyhow;
+use red_lox_compiler::{compiler::Compiler, debug::disassemble_chunk, vm::VirtualMachine};
 
-pub fn compile_and_run_file(file_name: &str) -> anyhow::Result<()> {
+fn compile_and_run_file(file_name: &str) -> anyhow::Result<()> {
     let mut file = File::open(file_name)?;
     let mut s = String::new();
     file.read_to_string(&mut s)?;
@@ -15,7 +15,7 @@ pub fn compile_and_run_file(file_name: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run_vm_as_interpreter() -> anyhow::Result<()> {
+fn run_vm_as_interpreter() -> anyhow::Result<()> {
     let mut line = String::new();
     loop {
         print!("> ");
@@ -50,5 +50,22 @@ fn compile_and_run(code: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum Error {}
+
+pub fn run_compiler<S>(file_name: Option<S>) -> ExitCode
+where
+    S: AsRef<str>,
+{
+    match file_name {
+        None => match run_vm_as_interpreter() {
+            Ok(()) => ExitCode::SUCCESS,
+            _ => ExitCode::FAILURE,
+        },
+        Some(name) => match compile_and_run_file(name.as_ref()) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("{}", e);
+                ExitCode::FAILURE
+            }
+        },
+    }
+}

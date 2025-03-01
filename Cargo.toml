@@ -10,6 +10,7 @@ members = ["red-lox-ast", "red-lox-interpreter", "red-lox-compiler", "red-lox-bi
 
 [workspace.dependencies]
 red-lox-ast = {path = "red-lox-ast"}
+red-lox-bin = {path = "red-lox-bin"}
 red-lox-interpreter = {path = "red-lox-interpreter"}
 red-lox-compiler = {path = "red-lox-compiler"}
 thiserror = "2.0.9"
@@ -23,8 +24,9 @@ name = "red-lox"
 path = "red-lox-bin/src/main.rs"
 
 [dependencies]
-anyhow = "1.0"
+anyhow = {workspace=true}
 red-lox-ast = {workspace=true}
+red-lox-bin = {workspace=true}
 red-lox-interpreter = {workspace=true}
 red-lox-compiler = {workspace=true}
 clap = { version = "4.5.31", features = ["derive"] }

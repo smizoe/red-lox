@@ -1,5 +1,3 @@
-use std::num::TryFromIntError;
-
 use crate::{instruction::Instruction, op_code::OpCode};
 
 pub struct Chunk {

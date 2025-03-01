@@ -4,20 +4,14 @@ use std::{
 };
 
 use crate::{compiler::Compiler, debug::disassemble_chunk, vm::VirtualMachine};
+use anyhow::anyhow;
 
-pub fn compile_and_run(file_name: &str) -> anyhow::Result<()> {
+pub fn compile_and_run_file(file_name: &str) -> anyhow::Result<()> {
     let mut file = File::open(file_name)?;
     let mut s = String::new();
     file.read_to_string(&mut s)?;
 
-    let mut compiler = Compiler::new(&s);
-    compiler.compile()?;
-    let chunk = compiler.finish();
-    if cfg!(debug_assertions) {
-        disassemble_chunk(&chunk, file_name);
-    }
-    let mut vm = VirtualMachine::new(&chunk);
-    vm.interpret()?;
+    compile_and_run(&s)?;
     Ok(())
 }
 
@@ -33,19 +27,25 @@ pub fn run_vm_as_interpreter() -> anyhow::Result<()> {
             break;
         }
 
-        let mut compiler = Compiler::new(&line);
-        if let Err(e) = compiler.compile() {
-            eprintln!("Failed to compile the statement: {}", e);
-            continue;
+        if let Err(e) = compile_and_run(&line) {
+            eprintln!("{}", e);
         }
-        let chunk = compiler.finish();
-        if cfg!(debug_assertions) {
-            disassemble_chunk(&chunk, "__interpreter__");
-        }
-        let mut vm = VirtualMachine::new(&chunk);
-        if let Err(e) = vm.interpret() {
-            eprintln!("Failed to interpret the statement: {}", e);
-        }
+    }
+    Ok(())
+}
+
+fn compile_and_run(code: &str) -> anyhow::Result<()> {
+    let mut compiler = Compiler::new(code);
+    if let Err(e) = compiler.compile() {
+        return Err(anyhow!("Failed to compile the statement: {}", e));
+    }
+    let chunk = compiler.finish();
+    if cfg!(debug_assertions) {
+        disassemble_chunk(&chunk, "__interpreter__");
+    }
+    let mut vm = VirtualMachine::new(&chunk);
+    if let Err(e) = vm.interpret() {
+        return Err(anyhow!("Failed to interpret the statement: {}", e));
     }
     Ok(())
 }

@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, mem::discriminant};
+use std::collections::VecDeque;
 
 use red_lox_ast::scanner::{Location, Scanner, Token, TokenWithLocation, TokenizationError};
 

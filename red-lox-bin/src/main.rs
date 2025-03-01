@@ -6,7 +6,7 @@ use std::{
 
 use clap::{Parser, Subcommand};
 
-use red_lox_compiler::command::{compile_and_run, run_vm_as_interpreter};
+use red_lox_compiler::command::{compile_and_run_file, run_vm_as_interpreter};
 use red_lox_interpreter::{
     command::{run_file, run_prompt},
     Interpreter,
@@ -66,20 +66,12 @@ where
             Ok(()) => ExitCode::SUCCESS,
             _ => ExitCode::FAILURE,
         },
-        Some(name) => match compile_and_run(name.as_ref()) {
+        Some(name) => match compile_and_run_file(name.as_ref()) {
             Ok(()) => ExitCode::SUCCESS,
-            _ => ExitCode::FAILURE,
+            Err(e) => {
+                eprintln!("{}", e);
+                ExitCode::FAILURE
+            }
         },
     }
-    //let mut chunk = Chunk::new();
-    //chunk.write(&Instruction::Constant(1.2), 123)?;
-    //chunk.write(&Instruction::Constant(3.4), 123)?;
-    //chunk.write(&Instruction::Add, 123)?;
-    //chunk.write(&Instruction::Constant(5.6), 123)?;
-    //chunk.write(&Instruction::Divide, 123)?;
-    //chunk.write(&Instruction::Negate, 123)?;
-    //chunk.write(&Instruction::Return, 123)?;
-    //let mut vm = VirtualMachine::new(&chunk);
-    //vm.interpret()?;
-    //Ok(())
 }

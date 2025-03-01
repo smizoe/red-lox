@@ -16,9 +16,8 @@ impl OpCode {
     pub fn len(&self) -> usize {
         use OpCode::*;
         match self {
-            Return | Negate => 1,
+            Return | Negate | Add | Subtract | Multiply | Divide => 1,
             Constant => 2,
-            Add | Subtract | Multiply | Divide => 3,
         }
     }
 }

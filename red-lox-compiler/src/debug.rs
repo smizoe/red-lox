@@ -30,10 +30,17 @@ pub fn disassemble_instruction(offset: usize, chunk: &Chunk) -> usize {
                 }
                 OpCode::Negate
                 | OpCode::Return
+                | OpCode::Nil
+                | OpCode::True
+                | OpCode::False
                 | OpCode::Add
                 | OpCode::Subtract
                 | OpCode::Multiply
-                | OpCode::Divide => println!("{}", op),
+                | OpCode::Divide
+                | OpCode::Equal
+                | OpCode::Greater
+                | OpCode::Less
+                | OpCode::Not => println!("{}", op),
             }
             op.len()
         }

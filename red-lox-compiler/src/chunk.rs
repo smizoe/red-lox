@@ -36,6 +36,10 @@ impl Chunk {
             Instruction::Subtract => self.code.push(OpCode::Subtract.into()),
             Instruction::Multiply => self.code.push(OpCode::Multiply.into()),
             Instruction::Divide => self.code.push(OpCode::Divide.into()),
+            Instruction::Not => self.code.push(OpCode::Not.into()),
+            Instruction::Equal => self.code.push(OpCode::Equal.into()),
+            Instruction::Less => self.code.push(OpCode::Less.into()),
+            Instruction::Greater => self.code.push(OpCode::Greater.into()),
             Instruction::Constant(v) => {
                 let index =
                     u8::try_from(self.constants.len()).map_err(|_| Error::TooManyConstantsError)?;
@@ -43,6 +47,10 @@ impl Chunk {
                 self.code.push(OpCode::Constant.into());
                 self.code.push(index);
             }
+            Instruction::Nil => self.code.push(OpCode::Nil.into()),
+            Instruction::Bool(b) => self
+                .code
+                .push((if *b { OpCode::True } else { OpCode::False }).into()),
         }
         match self.lines.last() {
             Some(line_info) if line_info.line == line => (),

@@ -1,6 +1,7 @@
 pub mod chunk;
+pub mod compiler;
+pub mod debug;
 mod instruction;
 mod op_code;
-pub mod debug;
+mod value;
 pub mod vm;
-pub mod compiler;

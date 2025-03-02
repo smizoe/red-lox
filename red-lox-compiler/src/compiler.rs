@@ -56,6 +56,7 @@ enum NextExpressionType {
     Unary,
     Binary,
     Number,
+    Literal,
 }
 
 #[derive(Debug, Clone)]
@@ -111,14 +112,42 @@ fn get_rule(token: &Token) -> Rule {
             prefix: None,
             infix: Binary,
         },
-        Token::Bang => Rule::default(),
-        Token::BangEqual => Rule::default(),
+        Token::Bang => Rule {
+            precedence: Precedence::None,
+            prefix: Unary,
+            infix: None,
+        },
+        Token::BangEqual => Rule {
+            precedence: Precedence::Equality,
+            prefix: None,
+            infix: Binary,
+        },
         Token::Equal => Rule::default(),
-        Token::EqualEqual => Rule::default(),
-        Token::Greater => Rule::default(),
-        Token::GreaterEqual => Rule::default(),
-        Token::Less => Rule::default(),
-        Token::LessEqual => Rule::default(),
+        Token::EqualEqual => Rule {
+            precedence: Precedence::Equality,
+            prefix: None,
+            infix: Binary,
+        },
+        Token::Greater => Rule {
+            precedence: Precedence::Comparison,
+            prefix: None,
+            infix: Binary,
+        },
+        Token::GreaterEqual => Rule {
+            precedence: Precedence::Comparison,
+            prefix: None,
+            infix: Binary,
+        },
+        Token::Less => Rule {
+            precedence: Precedence::Comparison,
+            prefix: None,
+            infix: Binary,
+        },
+        Token::LessEqual => Rule {
+            precedence: Precedence::Comparison,
+            prefix: None,
+            infix: Binary,
+        },
         Token::Identifier(_) => Rule::default(),
         Token::String(_) => Rule::default(),
         Token::Number(_) => Rule {
@@ -130,17 +159,29 @@ fn get_rule(token: &Token) -> Rule {
         Token::Break => Rule::default(),
         Token::Class => Rule::default(),
         Token::Else => Rule::default(),
-        Token::False => Rule::default(),
+        Token::False => Rule {
+            precedence: Precedence::None,
+            prefix: Literal,
+            infix: None,
+        },
         Token::Fun => Rule::default(),
         Token::For => Rule::default(),
         Token::If => Rule::default(),
-        Token::Nil => Rule::default(),
+        Token::Nil => Rule {
+            precedence: Precedence::None,
+            prefix: Literal,
+            infix: None,
+        },
         Token::Or => Rule::default(),
         Token::Print => Rule::default(),
         Token::Return => Rule::default(),
         Token::Super => Rule::default(),
         Token::This => Rule::default(),
-        Token::True => Rule::default(),
+        Token::True => Rule {
+            precedence: Precedence::None,
+            prefix: Literal,
+            infix: None,
+        },
         Token::Var => Rule::default(),
         Token::While => Rule::default(),
         Token::Eof => Rule::default(),
@@ -237,6 +278,7 @@ impl<'a> Parser<'a> {
             NextExpressionType::Unary => self.unary(),
             NextExpressionType::Binary => self.binary(),
             NextExpressionType::Number => self.number(),
+            NextExpressionType::Literal => self.literal(),
         }
     }
 
@@ -263,10 +305,25 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    fn literal(&mut self) -> Result<(), Error> {
+        let instruction = match &self.prev.token {
+            Token::Nil => Instruction::Nil,
+            Token::True => Instruction::Bool(true),
+            Token::False => Instruction::Bool(false),
+            _ => unreachable!(),
+        };
+        self.instructions.push_back(InstructionWithLocation {
+            instruction,
+            location: self.prev.location.clone(),
+        });
+        Ok(())
+    }
+
     fn unary(&mut self) -> Result<(), Error> {
         let instruction = InstructionWithLocation {
             instruction: match &self.prev.token {
                 Token::Minus => Instruction::Negate,
+                Token::Bang => Instruction::Not,
                 _ => unreachable!(),
             },
             location: self.prev.location.clone(),
@@ -277,18 +334,27 @@ impl<'a> Parser<'a> {
     }
 
     fn binary(&mut self) -> Result<(), Error> {
-        let instruction = InstructionWithLocation {
-            instruction: match &self.prev.token {
-                Token::Minus => Instruction::Subtract,
-                Token::Plus => Instruction::Add,
-                Token::Slash => Instruction::Divide,
-                Token::Star => Instruction::Multiply,
-                _ => unreachable!(),
-            },
-            location: self.current.location.clone(),
+        let instructions: &[Instruction] = match &self.prev.token {
+            Token::Minus => &[Instruction::Subtract],
+            Token::Plus => &[Instruction::Add],
+            Token::Slash => &[Instruction::Divide],
+            Token::Star => &[Instruction::Multiply],
+            Token::EqualEqual => &[Instruction::Equal],
+            Token::Greater => &[Instruction::Greater],
+            Token::Less => &[Instruction::Less],
+            Token::BangEqual => &[Instruction::Equal, Instruction::Not],
+            Token::GreaterEqual => &[Instruction::Less, Instruction::Not],
+            Token::LessEqual => &[Instruction::Greater, Instruction::Not],
+            _ => unreachable!(),
         };
+        let location = self.current.location.clone();
         self.parse_precedence(get_rule(&self.prev.token).precedence.plusone())?;
-        self.instructions.push_back(instruction);
+        for instruction in instructions {
+            self.instructions.push_back(InstructionWithLocation {
+                instruction: instruction.clone(),
+                location: location.clone(),
+            });
+        }
         Ok(())
     }
 }

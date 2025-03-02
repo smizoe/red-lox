@@ -5,6 +5,12 @@ pub enum Instruction {
     Subtract,
     Multiply,
     Divide,
+    Equal,
+    Less,
+    Greater,
+    Not,
     Negate,
     Constant(f64),
+    Nil,
+    Bool(bool),
 }

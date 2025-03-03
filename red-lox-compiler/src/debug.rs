@@ -40,7 +40,8 @@ pub fn disassemble_instruction(offset: usize, chunk: &Chunk) -> usize {
                 | OpCode::Equal
                 | OpCode::Greater
                 | OpCode::Less
-                | OpCode::Not => println!("{}", op),
+                | OpCode::Not
+                | OpCode::Comma => println!("{}", op),
             }
             op.len()
         }

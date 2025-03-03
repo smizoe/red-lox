@@ -51,6 +51,7 @@ impl Chunk {
             Instruction::Bool(b) => self
                 .code
                 .push((if *b { OpCode::True } else { OpCode::False }).into()),
+            Instruction::Comma => self.code.push(OpCode::Comma.into()),
         }
         match self.lines.last() {
             Some(line_info) if line_info.line == line => (),

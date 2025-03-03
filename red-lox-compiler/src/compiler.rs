@@ -87,7 +87,11 @@ fn get_rule(token: &Token) -> Rule {
         Token::RightParen => Rule::default(),
         Token::LeftBrace => Rule::default(),
         Token::RightBrace => Rule::default(),
-        Token::Comma => Rule::default(),
+        Token::Comma => Rule {
+            precedence: Precedence::Assignment,
+            prefix: None,
+            infix: Binary,
+        },
         Token::Dot => Rule::default(),
         Token::Minus => Rule {
             precedence: Precedence::Term,
@@ -345,6 +349,7 @@ impl<'a> Parser<'a> {
             Token::BangEqual => &[Instruction::Equal, Instruction::Not],
             Token::GreaterEqual => &[Instruction::Less, Instruction::Not],
             Token::LessEqual => &[Instruction::Greater, Instruction::Not],
+            Token::Comma => &[Instruction::Comma],
             _ => unreachable!(),
         };
         let location = self.current.location.clone();

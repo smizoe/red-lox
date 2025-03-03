@@ -133,6 +133,11 @@ impl<'a, 'b, 'c> VirtualMachine<'a, 'b, 'c> {
                     let v = self.pop()?.is_falsy();
                     self.push(Value::Bool(v));
                 }
+                OpCode::Comma => {
+                    let top = self.pop()?;
+                    let _ = self.pop();
+                    self.push(top);
+                }
             }
         }
     }

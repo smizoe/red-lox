@@ -16,6 +16,7 @@ pub enum OpCode {
     Not,
     Negate,
     Return,
+    Comma,
 }
 
 impl OpCode {
@@ -24,7 +25,7 @@ impl OpCode {
         use OpCode::*;
         match self {
             Return | Negate | Add | Subtract | Multiply | Divide | Not | Nil | True | False
-            | Equal | Greater | Less => 1,
+            | Equal | Greater | Less | Comma => 1,
             Constant => 2,
         }
     }
@@ -47,6 +48,7 @@ impl Display for OpCode {
             OpCode::Multiply => write!(f, "OP_MULTIPLY"),
             OpCode::Divide => write!(f, "OP_DIVIDE"),
             OpCode::Not => write!(f, "OP_NOT"),
+            OpCode::Comma => write!(f, "OP_COMMA"),
         }
     }
 }
@@ -77,6 +79,7 @@ impl TryFrom<u8> for OpCode {
             value if value == Equal as u8 => Ok(Equal),
             value if value == Greater as u8 => Ok(Greater),
             value if value == Less as u8 => Ok(Less),
+            value if value == Comma as u8 => Ok(Comma),
             _ => Err(ConversionError { from: value }),
         }
     }

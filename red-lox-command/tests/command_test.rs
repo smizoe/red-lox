@@ -7,38 +7,6 @@ use rstest::rstest;
 use std::fs::File;
 use std::io::Read;
 
-#[rstest]
-fn test_lox_interpreter(#[files("../tests/lox/**/*.lox")] path: PathBuf) {
-    use red_lox_command::interpreter::run_interpreter;
-
-    let mut out = Cursor::new(Vec::new());
-    let mut err = Cursor::new(Vec::new());
-    let expected_output = ExpectedOutput::new(&path);
-
-    let _ = run_interpreter(Some(path), &mut out, &mut err);
-
-    let out_lines = String::from_utf8(out.into_inner())
-        .unwrap()
-        .lines()
-        .map(str::to_string)
-        .collect::<Vec<String>>();
-    let err_lines = String::from_utf8(err.into_inner())
-        .unwrap()
-        .lines()
-        .map(str::to_string)
-        .collect::<Vec<String>>();
-    assert_eq!(
-        out_lines, expected_output.stdout,
-        "out_lines: {:?}\nerr_lines: {:?}",
-        out_lines, err_lines
-    );
-    assert_eq!(
-        err_lines, expected_output.stderr,
-        "out_lines: {:?}\nerr_lines: {:?}",
-        out_lines, err_lines
-    );
-}
-
 lazy_static! {
     static ref EXPECTATION_RE: Regex =
         Regex::new(r"^.*//[[:space:]]*([[:word:]]+):[[:space:]](.*)$").unwrap();
@@ -81,4 +49,36 @@ impl ExpectedOutput {
         }
         result
     }
+}
+
+#[rstest]
+fn test_lox_interpreter(#[files("../tests/lox/**/*.lox")] path: PathBuf) {
+    use red_lox_command::interpreter::run_interpreter;
+
+    let mut out = Cursor::new(Vec::new());
+    let mut err = Cursor::new(Vec::new());
+    let expected_output = ExpectedOutput::new(&path);
+
+    let _ = run_interpreter(Some(path), &mut out, &mut err);
+
+    let out_lines = String::from_utf8(out.into_inner())
+        .unwrap()
+        .lines()
+        .map(str::to_string)
+        .collect::<Vec<String>>();
+    let err_lines = String::from_utf8(err.into_inner())
+        .unwrap()
+        .lines()
+        .map(str::to_string)
+        .collect::<Vec<String>>();
+    assert_eq!(
+        out_lines, expected_output.stdout,
+        "out_lines: {:?}\nerr_lines: {:?}",
+        out_lines, err_lines
+    );
+    assert_eq!(
+        err_lines, expected_output.stderr,
+        "out_lines: {:?}\nerr_lines: {:?}",
+        out_lines, err_lines
+    );
 }

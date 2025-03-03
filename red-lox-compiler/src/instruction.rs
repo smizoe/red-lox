@@ -9,6 +9,7 @@ pub enum Instruction {
     Less,
     Greater,
     Not,
+    Comma,
     Negate,
     Constant(f64),
     Nil,

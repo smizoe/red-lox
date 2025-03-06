@@ -68,3 +68,14 @@ impl Value {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::mem::size_of;
+
+    #[test]
+    fn test_value_size_is_that_of_usize() {
+        assert_eq!(size_of::<Value>(), size_of::<usize>() * 2);
+    }
+}

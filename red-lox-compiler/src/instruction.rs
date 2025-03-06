@@ -1,3 +1,6 @@
+use std::rc::Rc;
+
+
 #[derive(Debug, Clone)]
 pub enum Instruction {
     Return,
@@ -14,4 +17,5 @@ pub enum Instruction {
     Constant(f64),
     Nil,
     Bool(bool),
+    String(Rc<String>),
 }

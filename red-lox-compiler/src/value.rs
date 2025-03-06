@@ -1,10 +1,11 @@
-use std::fmt::{Display, Formatter};
+use std::{fmt::{Display, Formatter}, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Value {
     Nil,
     Bool(bool),
     Number(f64),
+    String(Rc<String>),
 }
 
 impl Display for Value {
@@ -13,6 +14,7 @@ impl Display for Value {
             Value::Nil => write!(f, "nil"),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Number(v) => write!(f, "{}", v),
+            Value::String(s) => write!(f, "{}", s),
         }
     }
 }
@@ -65,6 +67,7 @@ impl Value {
             Nil => "nil",
             Bool(_) => "boolean",
             Number(_) => "number",
+            String(_) => "string",
         }
     }
 }

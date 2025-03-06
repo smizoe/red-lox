@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::{borrow::Cow, collections::VecDeque, rc::Rc};
 
 use red_lox_ast::scanner::{Location, Scanner, Token, TokenWithLocation, TokenizationError};
 
@@ -56,6 +56,7 @@ enum NextExpressionType {
     Unary,
     Binary,
     Number,
+    String,
     Literal,
 }
 
@@ -153,7 +154,11 @@ fn get_rule(token: &Token) -> Rule {
             infix: Binary,
         },
         Token::Identifier(_) => Rule::default(),
-        Token::String(_) => Rule::default(),
+        Token::String(_) => Rule {
+            precedence: Precedence::None,
+            prefix: String,
+            infix: None,
+        },
         Token::Number(_) => Rule {
             precedence: Precedence::None,
             prefix: Number,
@@ -282,6 +287,7 @@ impl<'a> Parser<'a> {
             NextExpressionType::Unary => self.unary(),
             NextExpressionType::Binary => self.binary(),
             NextExpressionType::Number => self.number(),
+            NextExpressionType::String => self.string(),
             NextExpressionType::Literal => self.literal(),
         }
     }
@@ -304,6 +310,18 @@ impl<'a> Parser<'a> {
         };
         self.instructions.push_back(InstructionWithLocation {
             instruction: Instruction::Constant(v),
+            location: self.prev.location.clone(),
+        });
+        Ok(())
+    }
+
+    fn string(&mut self) -> Result<(), Error> {
+        let s = match &self.prev.token {
+            Token::String(s) => s,
+            _ => unreachable!(),
+        };
+        self.instructions.push_back(InstructionWithLocation {
+            instruction: Instruction::String(Rc::new(s.to_string())),
             location: self.prev.location.clone(),
         });
         Ok(())
@@ -387,11 +405,11 @@ impl<'a> Compiler<'a> {
                 return Err(e);
             }
             self.chunk
-                .write(&instruction, location.line)
+                .write(instruction, location.line)
                 .map_err(Error::ChunkWriteError)?;
         }
         self.chunk
-            .write(&Instruction::Return, self.parser.current.location.line)
+            .write(Instruction::Return, self.parser.current.location.line)
             .map_err(Error::ChunkWriteError)?;
         Ok(())
     }

@@ -1,8 +1,8 @@
-use crate::{instruction::Instruction, op_code::OpCode};
+use crate::{instruction::Instruction, op_code::OpCode, value::Value};
 
 pub struct Chunk {
     pub(crate) code: Vec<u8>,
-    constants: Vec<f64>,
+    constants: Vec<Value>,
     lines: Vec<LineInfo>,
 }
 
@@ -27,7 +27,7 @@ impl Chunk {
         }
     }
 
-    pub fn write(&mut self, instruction: &Instruction, line: usize) -> Result<(), Error> {
+    pub(crate) fn write(&mut self, instruction: Instruction, line: usize) -> Result<(), Error> {
         let offset = self.code.len();
         match instruction {
             Instruction::Return => self.code.push(OpCode::Return.into()),
@@ -43,14 +43,21 @@ impl Chunk {
             Instruction::Constant(v) => {
                 let index =
                     u8::try_from(self.constants.len()).map_err(|_| Error::TooManyConstantsError)?;
-                self.constants.push(*v);
+                self.constants.push(Value::Number(v));
                 self.code.push(OpCode::Constant.into());
                 self.code.push(index);
             }
             Instruction::Nil => self.code.push(OpCode::Nil.into()),
             Instruction::Bool(b) => self
                 .code
-                .push((if *b { OpCode::True } else { OpCode::False }).into()),
+                .push((if b { OpCode::True } else { OpCode::False }).into()),
+            Instruction::String(s) => {
+                let index =
+                    u8::try_from(self.constants.len()).map_err(|_| Error::TooManyConstantsError)?;
+                self.constants.push(Value::String(s));
+                self.code.push(OpCode::Constant.into());
+                self.code.push(index);
+            }
             Instruction::Comma => self.code.push(OpCode::Comma.into()),
         }
         match self.lines.last() {
@@ -60,8 +67,8 @@ impl Chunk {
         Ok(())
     }
 
-    pub fn get_constant(&self, index: usize) -> f64 {
-        self.constants[index]
+    pub(crate) fn get_constant(&self, index: usize) -> Value {
+        self.constants[index].clone()
     }
 
     pub(crate) fn line_of(&self, offset: usize) -> usize {

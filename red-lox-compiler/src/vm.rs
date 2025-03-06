@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::{io::Write, rc::Rc};
 
 use crate::{chunk::Chunk, debug::disassemble_instruction, op_code::OpCode, value::Value};
 
@@ -60,7 +60,7 @@ impl<'a, 'b, 'c> VirtualMachine<'a, 'b, 'c> {
             match op {
                 OpCode::Constant => {
                     let v = self.get_constant();
-                    self.push(Value::Number(v));
+                    self.push(v);
                 }
                 OpCode::Nil => {
                     self.push(Value::Nil);
@@ -94,10 +94,16 @@ impl<'a, 'b, 'c> VirtualMachine<'a, 'b, 'c> {
                     return Ok(());
                 }
                 OpCode::Add => {
-                    self.check_numeric_binary_op_operands(op)?;
-                    let b = self.pop()?.to_number();
-                    let a = self.pop()?.to_number();
-                    self.push(Value::Number(a + b));
+                    self.check_binary_plus_operands()?;
+                    let b = self.pop()?;
+                    let a = self.pop()?;
+                    match (a, b) {
+                        (Value::Number(lhs), Value::Number(rhs)) => self.push(Value::Number(a + b)),
+                        (Value::String(lhs), Value::String(rhs)) => {
+                            self.push(Value::String(Rc::new(lhs.to_string() + rhs.as_ref())));
+                        }
+                        _ => unreachable!(),
+                    }
                 }
                 OpCode::Subtract => {
                     self.check_numeric_binary_op_operands(op)?;
@@ -142,7 +148,7 @@ impl<'a, 'b, 'c> VirtualMachine<'a, 'b, 'c> {
         }
     }
 
-    fn get_constant(&mut self) -> f64 {
+    fn get_constant(&mut self) -> Value {
         self.chunk.get_constant(self.read_byte().into())
     }
 
@@ -178,6 +184,24 @@ impl<'a, 'b, 'c> VirtualMachine<'a, 'b, 'c> {
         )
     }
 
+    fn check_binary_plus_operands(&self) -> Result<(), Error> {
+        use Value::*;
+        match (self.peek(1)?, self.peek(0)?) {
+            (Number(_), Number(_)) => Ok(()),
+            (String(_), String(_)) => Ok(()),
+            (lhs, rhs) => {
+                return Err(Error::InvalidOperandError {
+                    line: self.line_of(self.ip - 1),
+                    msg: format!(
+                        "The operands of OP_PLUS must be two numbers or strings but got lhs: {}, rhs: {}",
+                        lhs.to_type_str(),
+                        rhs.to_type_str()
+                    ),
+                });
+            }
+        }
+    }
+
     fn check_numeric_binary_op_operands(&self, op_code: OpCode) -> Result<(), Error> {
         use Value::*;
         match (self.peek(1)?, self.peek(0)?) {
@@ -186,7 +210,7 @@ impl<'a, 'b, 'c> VirtualMachine<'a, 'b, 'c> {
                 return Err(Error::InvalidOperandError {
                     line: self.line_of(self.ip - 1),
                     msg: format!(
-                        "The operands of {} should be two numbers but got lhs: {}, rhs: {}",
+                        "The operands of {} must be two numbers but got lhs: {}, rhs: {}",
                         op_code,
                         lhs.to_type_str(),
                         rhs.to_type_str()
@@ -204,6 +228,7 @@ impl<'a, 'b, 'c> VirtualMachine<'a, 'b, 'c> {
                 Nil => println!("[  nil  ]"),
                 Bool(b) => println!("[{:^7}]", b),
                 Number(v) => println!("[{:^7.3}]", v),
+                String(_) => println!("[string ]"),
             }
         }
     }

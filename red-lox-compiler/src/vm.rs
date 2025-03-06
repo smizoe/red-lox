@@ -98,9 +98,14 @@ impl<'a, 'b, 'c> VirtualMachine<'a, 'b, 'c> {
                     let b = self.pop()?;
                     let a = self.pop()?;
                     match (a, b) {
-                        (Value::Number(lhs), Value::Number(rhs)) => self.push(Value::Number(a + b)),
-                        (Value::String(lhs), Value::String(rhs)) => {
-                            self.push(Value::String(Rc::new(lhs.to_string() + rhs.as_ref())));
+                        (Value::Number(lhs), Value::Number(rhs)) => {
+                            self.push(Value::Number(lhs + rhs))
+                        }
+                        (Value::String(v), rhs) => {
+                            self.push(Value::String(Rc::new(format!("{}{}", v, rhs))));
+                        }
+                        (lhs, Value::String(s)) => {
+                            self.push(Value::String(Rc::new(format!("{}{}", lhs, s))));
                         }
                         _ => unreachable!(),
                     }
@@ -188,12 +193,13 @@ impl<'a, 'b, 'c> VirtualMachine<'a, 'b, 'c> {
         use Value::*;
         match (self.peek(1)?, self.peek(0)?) {
             (Number(_), Number(_)) => Ok(()),
-            (String(_), String(_)) => Ok(()),
+            (String(_), _) => Ok(()),
+            (_, String(_)) => Ok(()),
             (lhs, rhs) => {
                 return Err(Error::InvalidOperandError {
                     line: self.line_of(self.ip - 1),
                     msg: format!(
-                        "The operands of OP_PLUS must be two numbers or strings but got lhs: {}, rhs: {}",
+                        "The operands of OP_PLUS must be two numbers or one of them must be a string but got lhs: {}, rhs: {}",
                         lhs.to_type_str(),
                         rhs.to_type_str()
                     ),

@@ -1,10 +1,14 @@
-use std::{borrow::Cow, collections::VecDeque, rc::Rc};
+use std::{
+    collections::{HashSet, VecDeque},
+    rc::Rc,
+};
 
 use red_lox_ast::scanner::{Location, Scanner, Token, TokenWithLocation, TokenizationError};
 
 use crate::{
     chunk::{self, Chunk},
     instruction::Instruction,
+    interned_string::{intern_string, InternedString},
 };
 
 #[derive(Debug, Clone)]
@@ -213,6 +217,7 @@ struct Parser<'a> {
     errors: Vec<Error>,
     current: TokenWithLocation,
     prev: TokenWithLocation,
+    strings: HashSet<InternedString>,
 }
 
 impl<'a> Parser<'a> {
@@ -229,6 +234,7 @@ impl<'a> Parser<'a> {
                 token: Token::Eof,
                 location: Location::default(),
             },
+            strings: HashSet::new(),
         };
         parser.advance().expect("No token available in Scanner.");
         parser
@@ -320,8 +326,9 @@ impl<'a> Parser<'a> {
             Token::String(s) => s,
             _ => unreachable!(),
         };
+        let v = intern_string(&mut self.strings, s);
         self.instructions.push_back(InstructionWithLocation {
-            instruction: Instruction::String(Rc::new(s.to_string())),
+            instruction: Instruction::String(v),
             location: self.prev.location.clone(),
         });
         Ok(())
@@ -380,6 +387,11 @@ impl<'a> Parser<'a> {
         }
         Ok(())
     }
+}
+
+pub struct CompilationResult {
+    pub chunk: Chunk,
+    pub strings: HashSet<InternedString>,
 }
 
 pub struct Compiler<'a> {

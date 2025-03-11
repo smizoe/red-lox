@@ -1,4 +1,7 @@
-use std::{fmt::{Display, Formatter}, rc::Rc};
+use std::{
+    fmt::{Display, Formatter},
+    rc::Rc,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Value {

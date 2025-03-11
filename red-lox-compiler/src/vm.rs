@@ -1,16 +1,22 @@
-use std::{io::Write, rc::Rc};
+use std::{collections::HashSet, io::Write, rc::Rc};
 
-use crate::{chunk::Chunk, debug::disassemble_instruction, op_code::OpCode, value::Value};
+use crate::{
+    chunk::Chunk,
+    debug::disassemble_instruction,
+    interned_string::{intern_string, InternedString},
+    op_code::OpCode,
+    value::Value,
+};
 
 const STACK_MAX: usize = 256;
 
-pub struct VirtualMachine<'a, 'b, 'c> {
+pub struct VirtualMachine<'a, 'b> {
     chunk: &'a Chunk,
     ip: usize,
     stack: [Option<Value>; STACK_MAX],
     stack_top: usize,
     out: &'b mut dyn Write,
-    err: &'c mut dyn Write,
+    strings: HashSet<InternedString>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -30,15 +36,15 @@ pub enum Error {
     UninitializedStackReferenceError { line: usize },
 }
 
-impl<'a, 'b, 'c> VirtualMachine<'a, 'b, 'c> {
-    pub fn new(chunk: &'a Chunk, out: &'b mut dyn Write, err: &'c mut dyn Write) -> Self {
+impl<'a, 'b> VirtualMachine<'a, 'b> {
+    pub fn new(chunk: &'a Chunk, out: &'b mut dyn Write) -> Self {
         Self {
             chunk,
             ip: 0,
             stack: std::array::from_fn(|_| None),
             stack_top: 0,
             out,
-            err,
+            strings: HashSet::new(),
         }
     }
 
@@ -102,10 +108,12 @@ impl<'a, 'b, 'c> VirtualMachine<'a, 'b, 'c> {
                             self.push(Value::Number(lhs + rhs))
                         }
                         (Value::String(v), rhs) => {
-                            self.push(Value::String(Rc::new(format!("{}{}", v, rhs))));
+                            let interned = self.intern_string(&format!("{}{}", v, rhs));
+                            self.push(Value::String(interned));
                         }
                         (lhs, Value::String(s)) => {
-                            self.push(Value::String(Rc::new(format!("{}{}", lhs, s))));
+                            let interned = self.intern_string(&format!("{}{}", lhs, s));
+                            self.push(Value::String(interned));
                         }
                         _ => unreachable!(),
                     }
@@ -237,5 +245,9 @@ impl<'a, 'b, 'c> VirtualMachine<'a, 'b, 'c> {
                 String(_) => println!("[string ]"),
             }
         }
+    }
+
+    fn intern_string(&mut self, s: &str) -> Rc<String> {
+        intern_string(&mut self.strings, s)
     }
 }

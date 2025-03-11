@@ -57,7 +57,7 @@ where
     if cfg!(debug_assertions) {
         disassemble_chunk(&chunk, "__interpreter__");
     }
-    let mut vm = VirtualMachine::new(&chunk, out, err);
+    let mut vm = VirtualMachine::new(&chunk, out);
     if let Err(e) = vm.interpret() {
         return Err(anyhow!("Failed to interpret the statement: {}", e));
     }

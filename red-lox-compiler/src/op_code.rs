@@ -6,6 +6,7 @@ pub enum OpCode {
     Nil,
     True,
     False,
+    Pop,
     Equal,
     Greater,
     Less,
@@ -15,6 +16,7 @@ pub enum OpCode {
     Divide,
     Not,
     Negate,
+    Print,
     Return,
     Comma,
 }
@@ -24,8 +26,8 @@ impl OpCode {
     pub fn len(&self) -> usize {
         use OpCode::*;
         match self {
-            Return | Negate | Add | Subtract | Multiply | Divide | Not | Nil | True | False
-            | Equal | Greater | Less | Comma => 1,
+            Return | Negate | Print | Add | Subtract | Multiply | Divide | Not | Nil | True
+            | False | Pop | Equal | Greater | Less | Comma => 1,
             Constant => 2,
         }
     }
@@ -38,10 +40,12 @@ impl Display for OpCode {
             OpCode::Nil => write!(f, "OP_NIL"),
             OpCode::True => write!(f, "OP_TRUE"),
             OpCode::False => write!(f, "OP_FALSE"),
+            OpCode::Pop => write!(f, "OP_POP"),
             OpCode::Equal => write!(f, "OP_EQUAL"),
             OpCode::Greater => write!(f, "OP_GREATER"),
             OpCode::Less => write!(f, "OP_LESS"),
             OpCode::Negate => write!(f, "OP_NEGATE"),
+            OpCode::Print => write!(f, "OP_PRINT"),
             OpCode::Return => write!(f, "OP_RETURN"),
             OpCode::Add => write!(f, "OP_ADD"),
             OpCode::Subtract => write!(f, "OP_SUBTRACT"),
@@ -76,6 +80,7 @@ impl TryFrom<u8> for OpCode {
             value if value == Multiply as u8 => Ok(Multiply),
             value if value == Divide as u8 => Ok(Divide),
             value if value == Not as u8 => Ok(Not),
+            value if value == Pop as u8 => Ok(Pop),
             value if value == Equal as u8 => Ok(Equal),
             value if value == Greater as u8 => Ok(Greater),
             value if value == Less as u8 => Ok(Less),

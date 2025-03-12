@@ -73,6 +73,9 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
                 }
                 OpCode::True => self.push(Value::Bool(true)),
                 OpCode::False => self.push(Value::Bool(false)),
+                OpCode::Pop => {
+                    self.pop()?;
+                }
                 OpCode::Equal => {
                     let b = self.pop()?;
                     let a = self.pop()?;
@@ -94,9 +97,11 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
                     let v = self.pop()?.to_number();
                     self.push(Value::Number(-v));
                 }
-                OpCode::Return => {
+                OpCode::Print => {
                     let v = self.pop()?;
                     writeln!(self.out, "{}", v).expect("Failed to write to output.");
+                }
+                OpCode::Return => {
                     return Ok(());
                 }
                 OpCode::Add => {

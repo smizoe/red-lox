@@ -29,6 +29,7 @@ pub fn disassemble_instruction(offset: usize, chunk: &Chunk) -> usize {
                     );
                 }
                 OpCode::Negate
+                | OpCode::Print
                 | OpCode::Return
                 | OpCode::Nil
                 | OpCode::True
@@ -37,6 +38,7 @@ pub fn disassemble_instruction(offset: usize, chunk: &Chunk) -> usize {
                 | OpCode::Subtract
                 | OpCode::Multiply
                 | OpCode::Divide
+                | OpCode::Pop
                 | OpCode::Equal
                 | OpCode::Greater
                 | OpCode::Less

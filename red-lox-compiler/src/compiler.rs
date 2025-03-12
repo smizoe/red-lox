@@ -9,6 +9,7 @@ use crate::{
     chunk::{self, Chunk},
     instruction::Instruction,
     interned_string::{intern_string, InternedString},
+    op_code::OpCode,
 };
 
 #[derive(Debug, Clone)]
@@ -242,7 +243,7 @@ impl<'a> Parser<'a> {
 
     pub fn next_instruction(&mut self) -> Option<InstructionWithLocation> {
         if self.instructions.is_empty() && !self.scanner.is_at_end() {
-            if let Err(e) = self.expression() {
+            if let Err(e) = self.declaration() {
                 self.errors.push(e);
             }
         }
@@ -279,6 +280,52 @@ impl<'a> Parser<'a> {
             self.advance()?;
             self.parse_next_expr(get_rule(&self.prev.token).infix)?;
         }
+        Ok(())
+    }
+
+    fn declaration(&mut self) -> Result<(), Error> {
+        self.statement()
+    }
+
+    fn statement(&mut self) -> Result<(), Error> {
+        match self.current.token {
+            Token::Print => {
+                self.advance()?;
+                self.print_statement()
+            }
+            _ => self.expression_statement(),
+        }
+    }
+
+    fn print_statement(&mut self) -> Result<(), Error> {
+        let location = self.prev.location.clone();
+        self.expression()?;
+        self.consume(Token::Semicolon, |t| {
+            format!(
+                "{} Expected ';' after value, found {:?}",
+                t.location, t.token
+            )
+        })?;
+        self.instructions.push_back(InstructionWithLocation {
+            instruction: Instruction::Print,
+            location,
+        });
+        Ok(())
+    }
+
+    fn expression_statement(&mut self) -> Result<(), Error> {
+        let location = self.prev.location.clone();
+        self.expression()?;
+        self.consume(Token::Semicolon, |t| {
+            format!(
+                "{} Expected ';' after expression, found {:?}",
+                t.location, t.token
+            )
+        })?;
+        self.instructions.push_back(InstructionWithLocation {
+            instruction: Instruction::Pop,
+            location,
+        });
         Ok(())
     }
 

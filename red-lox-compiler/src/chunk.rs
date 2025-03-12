@@ -19,7 +19,7 @@ pub enum Error {
 }
 
 impl Chunk {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             code: Vec::new(),
             constants: Vec::new(),
@@ -37,9 +37,11 @@ impl Chunk {
             Instruction::Multiply => self.code.push(OpCode::Multiply.into()),
             Instruction::Divide => self.code.push(OpCode::Divide.into()),
             Instruction::Not => self.code.push(OpCode::Not.into()),
+            Instruction::Pop => self.code.push(OpCode::Pop.into()),
             Instruction::Equal => self.code.push(OpCode::Equal.into()),
             Instruction::Less => self.code.push(OpCode::Less.into()),
             Instruction::Greater => self.code.push(OpCode::Greater.into()),
+            Instruction::Print => self.code.push(OpCode::Print.into()),
             Instruction::Constant(v) => {
                 let index =
                     u8::try_from(self.constants.len()).map_err(|_| Error::TooManyConstantsError)?;

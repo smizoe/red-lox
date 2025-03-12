@@ -37,14 +37,14 @@ pub enum Error {
 }
 
 impl<'a, 'b> VirtualMachine<'a, 'b> {
-    pub fn new(chunk: &'a Chunk, out: &'b mut dyn Write) -> Self {
+    pub fn new(chunk: &'a Chunk, strings: HashSet<InternedString>, out: &'b mut dyn Write) -> Self {
         Self {
             chunk,
             ip: 0,
             stack: std::array::from_fn(|_| None),
             stack_top: 0,
             out,
-            strings: HashSet::new(),
+            strings,
         }
     }
 

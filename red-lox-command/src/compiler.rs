@@ -51,13 +51,13 @@ where
 {
     let mut compiler = Compiler::new(code);
     if let Err(e) = compiler.compile() {
-        return Err(anyhow!("Failed to compile the statement: {}", e));
+        return Err(anyhow!("Failed to compile the statement:\n{}", e));
     }
-    let chunk = compiler.finish();
+    let result = compiler.finish();
     if cfg!(debug_assertions) {
-        disassemble_chunk(&chunk, "__interpreter__");
+        disassemble_chunk(&result.chunk, "__interpreter__");
     }
-    let mut vm = VirtualMachine::new(&chunk, out);
+    let mut vm = VirtualMachine::new(&result.chunk, result.strings, out);
     if let Err(e) = vm.interpret() {
         return Err(anyhow!("Failed to interpret the statement: {}", e));
     }

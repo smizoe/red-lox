@@ -1,7 +1,7 @@
 use std::{borrow::Borrow, collections::HashSet, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct InternedString(Rc<String>);
+pub struct InternedString(Rc<String>);
 
 impl Borrow<str> for InternedString {
     fn borrow(&self) -> &str {

@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashSet, VecDeque},
-    rc::Rc,
-};
+use std::collections::{HashSet, VecDeque};
 
 use red_lox_ast::scanner::{Location, Scanner, Token, TokenWithLocation, TokenizationError};
 
@@ -9,7 +6,6 @@ use crate::{
     chunk::{self, Chunk},
     instruction::Instruction,
     interned_string::{intern_string, InternedString},
-    op_code::OpCode,
 };
 
 #[derive(Debug, Clone)]
@@ -210,6 +206,8 @@ pub enum Error {
     UnexpectedTokenError(String),
     #[error("{}", .0)]
     ChunkWriteError(chunk::Error),
+    #[error("{}", .0.into_iter().fold(String::new(), |acc,  e| format!("{}{}\n", acc, e)))]
+    CompilationError(Vec<Error>),
 }
 
 struct Parser<'a> {
@@ -486,12 +484,14 @@ impl<'a> Compiler<'a> {
             location,
         }) = self.parser.next_instruction()
         {
-            if let Some(e) = self.parser.errors.pop() {
-                return Err(e);
-            }
             self.chunk
                 .write(instruction, location.line)
                 .map_err(Error::ChunkWriteError)?;
+        }
+        if !self.parser.errors.is_empty() {
+            return Err(Error::CompilationError(std::mem::take(
+                &mut self.parser.errors,
+            )));
         }
         self.chunk
             .write(Instruction::Return, self.parser.current.location.line)
@@ -499,7 +499,10 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    pub fn finish(self) -> Chunk {
-        return self.chunk;
+    pub fn finish(self) -> CompilationResult {
+        CompilationResult {
+            chunk: self.chunk,
+            strings: self.parser.strings,
+        }
     }
 }

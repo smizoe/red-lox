@@ -246,8 +246,34 @@ impl<'a> Parser<'a> {
             if let Err(e) = self.declaration() {
                 self.errors.push(e);
             }
+            if let Err(e) = self.synchronize() {
+                self.errors.push(e);
+            }
         }
         self.instructions.pop_front()
+    }
+
+    fn synchronize(&mut self) -> Result<(), Error> {
+        while self.current.token != Token::Eof {
+            if self.prev.token == Token::Semicolon {
+                return Ok(());
+            }
+
+            match self.current.token {
+                Token::Class
+                | Token::Fun
+                | Token::Var
+                | Token::For
+                | Token::If
+                | Token::While
+                | Token::Print
+                | Token::Return => return Ok(()),
+                _ => {
+                    self.advance()?;
+                }
+            }
+        }
+        Ok(())
     }
 
     fn advance(&mut self) -> Result<(), Error> {

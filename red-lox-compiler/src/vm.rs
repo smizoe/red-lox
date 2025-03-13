@@ -1,4 +1,7 @@
-use std::{collections::HashSet, io::Write, rc::Rc};
+use std::{
+    collections::{HashMap, HashSet},
+    io::Write,
+};
 
 use crate::{
     chunk::Chunk,
@@ -17,6 +20,7 @@ pub struct VirtualMachine<'a, 'b> {
     stack_top: usize,
     out: &'b mut dyn Write,
     strings: HashSet<InternedString>,
+    globals: HashMap<InternedString, Value>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -45,6 +49,7 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
             stack_top: 0,
             out,
             strings,
+            globals: HashMap::new(),
         }
     }
 
@@ -76,6 +81,13 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
                 OpCode::Pop => {
                     self.pop()?;
                 }
+                OpCode::DefineGlobal => match self.get_constant() {
+                    Value::String(s) => {
+                        self.globals.insert(s, self.peek(0)?.clone());
+                        self.pop()?;
+                    }
+                    _ => unreachable!(),
+                },
                 OpCode::Equal => {
                     let b = self.pop()?;
                     let a = self.pop()?;
@@ -252,7 +264,7 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
         }
     }
 
-    fn intern_string(&mut self, s: &str) -> Rc<String> {
+    fn intern_string(&mut self, s: &str) -> InternedString {
         intern_string(&mut self.strings, s)
     }
 }

@@ -1,14 +1,15 @@
-use std::rc::Rc;
+use crate::interned_string::InternedString;
 
 
 #[derive(Debug, Clone)]
-pub enum Instruction {
+pub(crate) enum Instruction {
     Return,
     Add,
     Subtract,
     Multiply,
     Divide,
     Pop,
+    DefineGlobal(InternedString),
     Equal,
     Less,
     Greater,
@@ -19,5 +20,5 @@ pub enum Instruction {
     Constant(f64),
     Nil,
     Bool(bool),
-    String(Rc<String>),
+    String(InternedString),
 }

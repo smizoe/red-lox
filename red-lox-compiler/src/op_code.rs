@@ -7,6 +7,7 @@ pub enum OpCode {
     True,
     False,
     Pop,
+    DefineGlobal,
     Equal,
     Greater,
     Less,
@@ -26,9 +27,8 @@ impl OpCode {
     pub fn len(&self) -> usize {
         use OpCode::*;
         match self {
-            Return | Negate | Print | Add | Subtract | Multiply | Divide | Not | Nil | True
-            | False | Pop | Equal | Greater | Less | Comma => 1,
-            Constant => 2,
+            Constant | DefineGlobal => 2,
+            _ => 1,
         }
     }
 }
@@ -41,6 +41,7 @@ impl Display for OpCode {
             OpCode::True => write!(f, "OP_TRUE"),
             OpCode::False => write!(f, "OP_FALSE"),
             OpCode::Pop => write!(f, "OP_POP"),
+            OpCode::DefineGlobal => write!(f, "OP_DEFINE_GLOBAL"),
             OpCode::Equal => write!(f, "OP_EQUAL"),
             OpCode::Greater => write!(f, "OP_GREATER"),
             OpCode::Less => write!(f, "OP_LESS"),
@@ -81,6 +82,7 @@ impl TryFrom<u8> for OpCode {
             value if value == Divide as u8 => Ok(Divide),
             value if value == Not as u8 => Ok(Not),
             value if value == Pop as u8 => Ok(Pop),
+            value if value == DefineGlobal as u8 => Ok(DefineGlobal),
             value if value == Equal as u8 => Ok(Equal),
             value if value == Greater as u8 => Ok(Greater),
             value if value == Less as u8 => Ok(Less),

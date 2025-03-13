@@ -1,6 +1,8 @@
 use std::collections::{HashSet, VecDeque};
 
-use red_lox_ast::scanner::{Location, Scanner, Token, TokenWithLocation, TokenizationError};
+use red_lox_ast::scanner::{
+    Location, Scanner, Token, TokenWithLocation, TokenizationError, IDENTIFIER_TOKEN,
+};
 
 use crate::{
     chunk::{self, Chunk},
@@ -308,7 +310,39 @@ impl<'a> Parser<'a> {
     }
 
     fn declaration(&mut self) -> Result<(), Error> {
-        self.statement()
+        match self.current.token {
+            Token::Var => {
+                self.advance()?;
+                self.var_declaration()
+            }
+            _ => self.statement(),
+        }
+    }
+
+    fn var_declaration(&mut self) -> Result<(), Error> {
+        let mut instructions = Vec::with_capacity(2);
+        let ident = self.consume(IDENTIFIER_TOKEN, |t| {
+            format!("{} Expect a variable name, found {:?}", t.location, t.token)
+        })?;
+
+        match self.current.token {
+            Token::Equal => {
+                self.expression()?;
+            }
+            _ => instructions.push(InstructionWithLocation {
+                instruction: Instruction::Nil,
+                location: ident.location.clone(),
+            }),
+        }
+        instructions.push(InstructionWithLocation {
+            instruction: Instruction::DefineGlobal(intern_string(
+                &mut self.strings,
+                ident.token.id_name(),
+            )),
+            location: ident.location.clone(),
+        });
+        self.instructions.extend(instructions);
+        Ok(())
     }
 
     fn statement(&mut self) -> Result<(), Error> {

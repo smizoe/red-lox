@@ -3,12 +3,14 @@ use std::{
     rc::Rc,
 };
 
+use crate::interned_string::InternedString;
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Value {
     Nil,
     Bool(bool),
     Number(f64),
-    String(Rc<String>),
+    String(InternedString),
 }
 
 impl Display for Value {

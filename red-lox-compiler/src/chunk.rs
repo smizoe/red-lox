@@ -42,6 +42,13 @@ impl Chunk {
             Instruction::Less => self.code.push(OpCode::Less.into()),
             Instruction::Greater => self.code.push(OpCode::Greater.into()),
             Instruction::Print => self.code.push(OpCode::Print.into()),
+            Instruction::DefineGlobal(id) => {
+                let index =
+                    u8::try_from(self.constants.len()).map_err(|_| Error::TooManyConstantsError)?;
+                self.constants.push(Value::String(id));
+                self.code.push(OpCode::DefineGlobal.into());
+                self.code.push(index);
+            }
             Instruction::Constant(v) => {
                 let index =
                     u8::try_from(self.constants.len()).map_err(|_| Error::TooManyConstantsError)?;

@@ -1,7 +1,5 @@
 use std::{convert::TryFrom, fmt::Display};
 
-use crate::value;
-
 #[derive(Debug, Clone, Copy)]
 pub enum OpCode {
     Constant = 1,

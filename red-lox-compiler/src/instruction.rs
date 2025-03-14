@@ -11,6 +11,7 @@ pub(crate) enum Instruction {
     Pop,
     GetGlobal(InternedString),
     DefineGlobal(InternedString),
+    SetGlobal(InternedString),
     Equal,
     Less,
     Greater,

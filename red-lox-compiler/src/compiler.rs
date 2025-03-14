@@ -305,11 +305,12 @@ impl<'a> Parser<'a> {
     fn parse_precedence(&mut self, precedence: Precedence) -> Result<(), Error> {
         self.advance()?;
         let rule = get_rule(&self.prev.token);
-        self.parse_next_expr(rule.prefix)?;
+        let can_assign = precedence <= Precedence::Assignment;
+        self.parse_next_expr(rule.prefix, can_assign)?;
 
         while precedence <= get_rule(&self.current.token).precedence {
             self.advance()?;
-            self.parse_next_expr(get_rule(&self.prev.token).infix)?;
+            self.parse_next_expr(get_rule(&self.prev.token).infix, /*unused*/ can_assign)?;
         }
         Ok(())
     }
@@ -396,7 +397,11 @@ impl<'a> Parser<'a> {
         self.parse_precedence(Precedence::Assignment)
     }
 
-    fn parse_next_expr(&mut self, next_expr: NextExpressionType) -> Result<(), Error> {
+    fn parse_next_expr(
+        &mut self,
+        next_expr: NextExpressionType,
+        can_assign: bool,
+    ) -> Result<(), Error> {
         match next_expr {
             NextExpressionType::None => Ok(()),
             NextExpressionType::Grouping => self.grouping(),
@@ -405,18 +410,30 @@ impl<'a> Parser<'a> {
             NextExpressionType::Number => self.number(),
             NextExpressionType::String => self.string(),
             NextExpressionType::Literal => self.literal(),
-            NextExpressionType::Variable => self.variable(),
+            NextExpressionType::Variable => self.variable(can_assign),
         }
     }
 
-    fn variable(&mut self) -> Result<(), Error> {
-        self.instructions.push_back(InstructionWithLocation {
-            instruction: Instruction::GetGlobal(intern_string(
-                &mut self.strings,
-                self.prev.token.id_name(),
-            )),
-            location: self.prev.location.clone(),
-        });
+    fn variable(&mut self, can_assign: bool) -> Result<(), Error> {
+        let instruction = if can_assign && self.current.token == Token::Equal {
+            self.expression()?;
+            InstructionWithLocation {
+                instruction: Instruction::SetGlobal(intern_string(
+                    &mut self.strings,
+                    self.prev.token.id_name(),
+                )),
+                location: self.prev.location.clone(),
+            }
+        } else {
+            InstructionWithLocation {
+                instruction: Instruction::GetGlobal(intern_string(
+                    &mut self.strings,
+                    self.prev.token.id_name(),
+                )),
+                location: self.prev.location.clone(),
+            }
+        };
+        self.instructions.push_back(instruction);
         Ok(())
     }
 

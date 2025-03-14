@@ -105,6 +105,21 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
                     }
                     _ => unreachable!(),
                 },
+                OpCode::SetGlobal => match self.get_constant() {
+                    Value::String(s) => {
+                        if self.globals.contains_key(&s) {
+                            return Err(Error::UndefinedVariableError {
+                                line: self.line_of(self.ip - 1),
+                                var_name: s.to_string(),
+                            });
+                        }
+                        let v = self.pop()?;
+                        if let Some(ent) = self.globals.get_mut(&s) {
+                            *ent = v;
+                        }
+                    }
+                    _ => unreachable!(),
+                },
                 OpCode::Equal => {
                     let b = self.pop()?;
                     let a = self.pop()?;

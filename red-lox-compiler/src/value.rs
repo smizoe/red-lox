@@ -1,6 +1,5 @@
 use std::{
     fmt::{Display, Formatter},
-    rc::Rc,
 };
 
 use crate::interned_string::InternedString;

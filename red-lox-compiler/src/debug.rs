@@ -19,7 +19,7 @@ pub fn disassemble_instruction(offset: usize, chunk: &Chunk) -> usize {
     match chunk.code[offset].try_into() {
         Ok(op) => {
             match op {
-                OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal => {
+                OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal => {
                     let constant_index = chunk.code[offset + 1];
                     println!(
                         "{:<16} {:04} '{}'",

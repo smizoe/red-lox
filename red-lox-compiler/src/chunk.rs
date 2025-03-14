@@ -52,6 +52,12 @@ impl Chunk {
                 self.code.push(OpCode::DefineGlobal.into());
                 self.code.push(index);
             }
+            Instruction::SetGlobal(id) => {
+                let index = self.add_constant(Value::String(id))?;
+                self.code.push(OpCode::SetGlobal.into());
+                self.code.push(index);
+
+            }
             Instruction::Constant(v) => {
                 let index = self.add_constant(Value::Number(v))?;
                 self.code.push(OpCode::Constant.into());

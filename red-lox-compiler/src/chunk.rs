@@ -14,8 +14,8 @@ struct LineInfo {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Failed to add a constant to the chunk since # of constants exeeded the range represented by u8.")]
-    TooManyConstantsError,
+    #[error("[At line {line}] Failed to add a constant to the chunk since # of constants exeeded the range represented by u8.")]
+    TooManyConstantsError { line: usize },
 }
 
 impl Chunk {
@@ -43,23 +43,22 @@ impl Chunk {
             Instruction::Greater => self.code.push(OpCode::Greater.into()),
             Instruction::Print => self.code.push(OpCode::Print.into()),
             Instruction::GetGlobal(id) => {
-                let index = self.add_constant(Value::String(id))?;
+                let index = self.add_constant(Value::String(id), line)?;
                 self.code.push(OpCode::GetGlobal.into());
                 self.code.push(index);
             }
             Instruction::DefineGlobal(id) => {
-                let index = self.add_constant(Value::String(id))?;
+                let index = self.add_constant(Value::String(id), line)?;
                 self.code.push(OpCode::DefineGlobal.into());
                 self.code.push(index);
             }
             Instruction::SetGlobal(id) => {
-                let index = self.add_constant(Value::String(id))?;
+                let index = self.add_constant(Value::String(id), line)?;
                 self.code.push(OpCode::SetGlobal.into());
                 self.code.push(index);
-
             }
             Instruction::Constant(v) => {
-                let index = self.add_constant(Value::Number(v))?;
+                let index = self.add_constant(Value::Number(v), line)?;
                 self.code.push(OpCode::Constant.into());
                 self.code.push(index);
             }
@@ -68,7 +67,7 @@ impl Chunk {
                 .code
                 .push((if b { OpCode::True } else { OpCode::False }).into()),
             Instruction::String(s) => {
-                let index = self.add_constant(Value::String(s))?;
+                let index = self.add_constant(Value::String(s), line)?;
                 self.code.push(OpCode::Constant.into());
                 self.code.push(index);
             }
@@ -81,8 +80,9 @@ impl Chunk {
         Ok(())
     }
 
-    fn add_constant(&mut self, value: Value) -> Result<u8, Error> {
-        let index = u8::try_from(self.constants.len()).map_err(|_| Error::TooManyConstantsError)?;
+    fn add_constant(&mut self, value: Value, line: usize) -> Result<u8, Error> {
+        let index = u8::try_from(self.constants.len())
+            .map_err(move |_| Error::TooManyConstantsError { line })?;
         self.constants.push(value);
         Ok(index)
     }

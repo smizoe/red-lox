@@ -42,17 +42,18 @@ impl Chunk {
             Instruction::Less => self.code.push(OpCode::Less.into()),
             Instruction::Greater => self.code.push(OpCode::Greater.into()),
             Instruction::Print => self.code.push(OpCode::Print.into()),
+            Instruction::GetGlobal(id) => {
+                let index = self.add_constant(Value::String(id))?;
+                self.code.push(OpCode::GetGlobal.into());
+                self.code.push(index);
+            }
             Instruction::DefineGlobal(id) => {
-                let index =
-                    u8::try_from(self.constants.len()).map_err(|_| Error::TooManyConstantsError)?;
-                self.constants.push(Value::String(id));
+                let index = self.add_constant(Value::String(id))?;
                 self.code.push(OpCode::DefineGlobal.into());
                 self.code.push(index);
             }
             Instruction::Constant(v) => {
-                let index =
-                    u8::try_from(self.constants.len()).map_err(|_| Error::TooManyConstantsError)?;
-                self.constants.push(Value::Number(v));
+                let index = self.add_constant(Value::Number(v))?;
                 self.code.push(OpCode::Constant.into());
                 self.code.push(index);
             }
@@ -61,9 +62,7 @@ impl Chunk {
                 .code
                 .push((if b { OpCode::True } else { OpCode::False }).into()),
             Instruction::String(s) => {
-                let index =
-                    u8::try_from(self.constants.len()).map_err(|_| Error::TooManyConstantsError)?;
-                self.constants.push(Value::String(s));
+                let index = self.add_constant(Value::String(s))?;
                 self.code.push(OpCode::Constant.into());
                 self.code.push(index);
             }
@@ -74,6 +73,12 @@ impl Chunk {
             _ => self.lines.push(LineInfo { offset, line }),
         }
         Ok(())
+    }
+
+    fn add_constant(&mut self, value: Value) -> Result<u8, Error> {
+        let index = u8::try_from(self.constants.len()).map_err(|_| Error::TooManyConstantsError)?;
+        self.constants.push(value);
+        Ok(index)
     }
 
     pub(crate) fn get_constant(&self, index: usize) -> Value {

@@ -61,6 +61,7 @@ enum NextExpressionType {
     Number,
     String,
     Literal,
+    Variable,
 }
 
 #[derive(Debug, Clone)]
@@ -156,7 +157,11 @@ fn get_rule(token: &Token) -> Rule {
             prefix: None,
             infix: Binary,
         },
-        Token::Identifier(_) => Rule::default(),
+        Token::Identifier(_) => Rule {
+            precedence: Precedence::None,
+            prefix: Variable,
+            infix: None,
+        },
         Token::String(_) => Rule {
             precedence: Precedence::None,
             prefix: String,
@@ -400,7 +405,19 @@ impl<'a> Parser<'a> {
             NextExpressionType::Number => self.number(),
             NextExpressionType::String => self.string(),
             NextExpressionType::Literal => self.literal(),
+            NextExpressionType::Variable => self.variable(),
         }
+    }
+
+    fn variable(&mut self) -> Result<(), Error> {
+        self.instructions.push_back(InstructionWithLocation {
+            instruction: Instruction::GetGlobal(intern_string(
+                &mut self.strings,
+                self.prev.token.id_name(),
+            )),
+            location: self.prev.location.clone(),
+        });
+        Ok(())
     }
 
     fn grouping(&mut self) -> Result<(), Error> {

@@ -38,6 +38,10 @@ pub enum Error {
         "[At line {line}] runtime error: tried to refer to an uninitialized location in a stack"
     )]
     UninitializedStackReferenceError { line: usize },
+    #[error(
+        "[At line {line}] runtime error: variable '{var_name}' was accessed before it is defined."
+    )]
+    UndefinedVariableError { line: usize, var_name: String },
 }
 
 impl<'a, 'b> VirtualMachine<'a, 'b> {
@@ -81,6 +85,19 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
                 OpCode::Pop => {
                     self.pop()?;
                 }
+                OpCode::GetGlobal => match self.get_constant() {
+                    Value::String(s) => {
+                        let v =
+                            self.globals
+                                .get(&s)
+                                .ok_or_else(|| Error::UndefinedVariableError {
+                                    line: self.line_of(self.ip - 1),
+                                    var_name: s.to_string(),
+                                })?;
+                        self.push(v.clone());
+                    }
+                    _ => unreachable!(),
+                },
                 OpCode::DefineGlobal => match self.get_constant() {
                     Value::String(s) => {
                         self.globals.insert(s, self.peek(0)?.clone());

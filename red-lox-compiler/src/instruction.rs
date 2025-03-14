@@ -9,6 +9,7 @@ pub(crate) enum Instruction {
     Multiply,
     Divide,
     Pop,
+    GetGlobal(InternedString),
     DefineGlobal(InternedString),
     Equal,
     Less,

@@ -107,13 +107,13 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
                 },
                 OpCode::SetGlobal => match self.get_constant() {
                     Value::String(s) => {
-                        if self.globals.contains_key(&s) {
+                        if !self.globals.contains_key(&s) {
                             return Err(Error::UndefinedVariableError {
                                 line: self.line_of(self.ip - 1),
                                 var_name: s.to_string(),
                             });
                         }
-                        let v = self.pop()?;
+                        let v = self.peek(0)?.clone();
                         if let Some(ent) = self.globals.get_mut(&s) {
                             *ent = v;
                         }
@@ -186,16 +186,26 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
                     self.push(Value::Number(a / b));
                 }
                 OpCode::Greater => {
-                    self.check_numeric_binary_op_operands(op)?;
-                    let b = self.pop()?.to_number();
-                    let a = self.pop()?.to_number();
-                    self.push(Value::Bool(a > b));
+                    self.check_binary_comparison_op_operands(op)?;
+                    let b = self.pop()?;
+                    let a = self.pop()?;
+                    let cmp = Value::Bool(if a.is_number() {
+                        a.to_number() > b.to_number()
+                    } else {
+                        a.to_string() > b.to_string()
+                    });
+                    self.push(cmp);
                 }
                 OpCode::Less => {
-                    self.check_numeric_binary_op_operands(op)?;
-                    let b = self.pop()?.to_number();
-                    let a = self.pop()?.to_number();
-                    self.push(Value::Bool(a < b));
+                    self.check_binary_comparison_op_operands(op)?;
+                    let b = self.pop()?;
+                    let a = self.pop()?;
+                    let cmp = Value::Bool(if a.is_number() {
+                        a.to_number() < b.to_number()
+                    } else {
+                        a.to_string() < b.to_string()
+                    });
+                    self.push(cmp);
                 }
                 OpCode::Not => {
                     let v = self.pop()?.is_falsy();
@@ -257,6 +267,25 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
                     line: self.line_of(self.ip - 1),
                     msg: format!(
                         "The operands of OP_PLUS must be two numbers or one of them must be a string but got lhs: {}, rhs: {}",
+                        lhs.to_type_str(),
+                        rhs.to_type_str()
+                    ),
+                });
+            }
+        }
+    }
+
+    fn check_binary_comparison_op_operands(&self, op_code: OpCode) -> Result<(), Error> {
+        use Value::*;
+        match (self.peek(1)?, self.peek(0)?) {
+            (Number(_), Number(_)) => Ok(()),
+            (String(_), String(_)) => Ok(()),
+            (lhs, rhs) => {
+                return Err(Error::InvalidOperandError {
+                    line: self.line_of(self.ip - 1),
+                    msg: format!(
+                        "The operands of {} must be two numbers or two strings but got lhs: {}, rhs: {}",
+                        op_code,
                         lhs.to_type_str(),
                         rhs.to_type_str()
                     ),

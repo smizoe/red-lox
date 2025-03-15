@@ -19,6 +19,7 @@ struct InstructionWithLocation {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Precedence {
     None = 0,
+    Comma,
     Assignment,
     Or,
     And,
@@ -36,7 +37,8 @@ impl Precedence {
     fn plusone(&self) -> Self {
         use Precedence::*;
         match self {
-            None => Assignment,
+            None => Comma,
+            Comma => Assignment,
             Assignment => Or,
             Or => And,
             And => Equality,
@@ -93,7 +95,7 @@ fn get_rule(token: &Token) -> Rule {
         Token::LeftBrace => Rule::default(),
         Token::RightBrace => Rule::default(),
         Token::Comma => Rule {
-            precedence: Precedence::Assignment,
+            precedence: Precedence::Comma,
             prefix: None,
             infix: Binary,
         },
@@ -215,8 +217,8 @@ pub enum Error {
     ChunkWriteError(chunk::Error),
     #[error("{}", .0.into_iter().fold(String::new(), |acc,  e| format!("{}{}\n", acc, e)))]
     CompilationError(Vec<Error>),
-    #[error("[At line {line}] The lhs of assignment is invalid.")]
-    InvalidAssignmentError { line: usize },
+    #[error("{location} The lhs of assignment is invalid.")]
+    InvalidAssignmentError { location: Location },
 }
 
 struct Parser<'a> {
@@ -252,9 +254,9 @@ impl<'a> Parser<'a> {
         if self.instructions.is_empty() && !self.scanner.is_at_end() {
             if let Err(e) = self.declaration() {
                 self.errors.push(e);
-            }
-            if let Err(e) = self.synchronize() {
-                self.errors.push(e);
+                if let Err(e) = self.synchronize() {
+                    self.errors.push(e);
+                }
             }
         }
         self.instructions.pop_front()
@@ -327,7 +329,7 @@ impl<'a> Parser<'a> {
 
         if can_assign && self.next_token_is(Token::Equal)? {
             return Err(Error::InvalidAssignmentError {
-                line: self.prev.location.line,
+                location: self.prev.location.clone(),
             });
         }
         Ok(())
@@ -335,7 +337,6 @@ impl<'a> Parser<'a> {
 
     fn declaration(&mut self) -> Result<(), Error> {
         if self.next_token_is(Token::Var)? {
-            self.advance()?;
             self.var_declaration()
         } else {
             self.statement()
@@ -345,7 +346,10 @@ impl<'a> Parser<'a> {
     fn var_declaration(&mut self) -> Result<(), Error> {
         let mut instructions = Vec::with_capacity(2);
         let ident = self.consume(IDENTIFIER_TOKEN, |t| {
-            format!("{} Expect a variable name, found {:?}", t.location, t.token)
+            format!(
+                "{} Expected a variable name, found {:?}.",
+                t.location, t.token
+            )
         })?;
 
         if self.next_token_is(Token::Equal)? {
@@ -356,6 +360,12 @@ impl<'a> Parser<'a> {
                 location: ident.location.clone(),
             });
         }
+        self.consume(Token::Semicolon, |t| {
+            format!(
+                "{} Expected ';' after variable declaration, found {:?}.",
+                t.location, t.token
+            )
+        })?;
         instructions.push(InstructionWithLocation {
             instruction: Instruction::DefineGlobal(intern_string(
                 &mut self.strings,
@@ -408,6 +418,10 @@ impl<'a> Parser<'a> {
     }
 
     fn expression(&mut self) -> Result<(), Error> {
+        self.parse_precedence(Precedence::Comma)
+    }
+
+    fn assignment(&mut self) -> Result<(), Error> {
         self.parse_precedence(Precedence::Assignment)
     }
 
@@ -429,21 +443,16 @@ impl<'a> Parser<'a> {
     }
 
     fn variable(&mut self, can_assign: bool) -> Result<(), Error> {
+        let id = intern_string(&mut self.strings, self.prev.token.id_name());
         let instruction = if can_assign && self.next_token_is(Token::Equal)? {
-            self.expression()?;
+            self.assignment()?;
             InstructionWithLocation {
-                instruction: Instruction::SetGlobal(intern_string(
-                    &mut self.strings,
-                    self.prev.token.id_name(),
-                )),
+                instruction: Instruction::SetGlobal(id),
                 location: self.prev.location.clone(),
             }
         } else {
             InstructionWithLocation {
-                instruction: Instruction::GetGlobal(intern_string(
-                    &mut self.strings,
-                    self.prev.token.id_name(),
-                )),
+                instruction: Instruction::GetGlobal(id),
                 location: self.prev.location.clone(),
             }
         };

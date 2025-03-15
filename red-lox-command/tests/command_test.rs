@@ -84,7 +84,7 @@ fn test_lox_interpreter(#[files("../tests/lox/**/*.lox")] path: PathBuf) {
 }
 
 #[rstest]
-fn test_lox_compiler(#[files("../tests/lox/binary_op/left_associativity.lox")] path: PathBuf) {
+fn test_lox_compiler(#[files("../tests/lox/binary_op/*.lox")] path: PathBuf) {
     use red_lox_command::compiler::run_compiler;
 
     let mut out = Cursor::new(Vec::new());

@@ -215,6 +215,8 @@ pub enum Error {
     ChunkWriteError(chunk::Error),
     #[error("{}", .0.into_iter().fold(String::new(), |acc,  e| format!("{}{}\n", acc, e)))]
     CompilationError(Vec<Error>),
+    #[error("[At line {line}] The lhs of assignment is invalid.")]
+    InvalidAssignmentError { line: usize },
 }
 
 struct Parser<'a> {
@@ -291,12 +293,22 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    fn next_token_is(&mut self, t: Token) -> Result<bool, Error> {
+        let is_same_type =
+            std::mem::discriminant(&t) == std::mem::discriminant(&self.current.token);
+        if is_same_type {
+            self.advance()?;
+        }
+        Ok(is_same_type)
+    }
+
     fn consume<F>(&mut self, t: Token, msg_gen: F) -> Result<TokenWithLocation, Error>
     where
         F: FnOnce(&TokenWithLocation) -> String,
     {
         if std::mem::discriminant(&t) == std::mem::discriminant(&self.current.token) {
-            Ok(self.current.clone())
+            self.advance()?;
+            Ok(self.prev.clone())
         } else {
             Err(Error::UnexpectedTokenError(msg_gen(&self.current)))
         }
@@ -312,16 +324,21 @@ impl<'a> Parser<'a> {
             self.advance()?;
             self.parse_next_expr(get_rule(&self.prev.token).infix, /*unused*/ can_assign)?;
         }
+
+        if can_assign && self.next_token_is(Token::Equal)? {
+            return Err(Error::InvalidAssignmentError {
+                line: self.prev.location.line,
+            });
+        }
         Ok(())
     }
 
     fn declaration(&mut self) -> Result<(), Error> {
-        match self.current.token {
-            Token::Var => {
-                self.advance()?;
-                self.var_declaration()
-            }
-            _ => self.statement(),
+        if self.next_token_is(Token::Var)? {
+            self.advance()?;
+            self.var_declaration()
+        } else {
+            self.statement()
         }
     }
 
@@ -331,14 +348,13 @@ impl<'a> Parser<'a> {
             format!("{} Expect a variable name, found {:?}", t.location, t.token)
         })?;
 
-        match self.current.token {
-            Token::Equal => {
-                self.expression()?;
-            }
-            _ => instructions.push(InstructionWithLocation {
+        if self.next_token_is(Token::Equal)? {
+            self.expression()?;
+        } else {
+            instructions.push(InstructionWithLocation {
                 instruction: Instruction::Nil,
                 location: ident.location.clone(),
-            }),
+            });
         }
         instructions.push(InstructionWithLocation {
             instruction: Instruction::DefineGlobal(intern_string(
@@ -352,12 +368,11 @@ impl<'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> Result<(), Error> {
-        match self.current.token {
-            Token::Print => {
-                self.advance()?;
-                self.print_statement()
-            }
-            _ => self.expression_statement(),
+        if self.next_token_is(Token::Print)? {
+            self.advance()?;
+            self.print_statement()
+        } else {
+            self.expression_statement()
         }
     }
 
@@ -415,7 +430,7 @@ impl<'a> Parser<'a> {
     }
 
     fn variable(&mut self, can_assign: bool) -> Result<(), Error> {
-        let instruction = if can_assign && self.current.token == Token::Equal {
+        let instruction = if can_assign && self.next_token_is(Token::Equal)? {
             self.expression()?;
             InstructionWithLocation {
                 instruction: Instruction::SetGlobal(intern_string(

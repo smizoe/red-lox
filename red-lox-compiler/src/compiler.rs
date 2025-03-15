@@ -369,7 +369,6 @@ impl<'a> Parser<'a> {
 
     fn statement(&mut self) -> Result<(), Error> {
         if self.next_token_is(Token::Print)? {
-            self.advance()?;
             self.print_statement()
         } else {
             self.expression_statement()

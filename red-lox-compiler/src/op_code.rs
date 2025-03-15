@@ -1,6 +1,6 @@
 use std::{convert::TryFrom, fmt::Display};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OpCode {
     Constant = 1,
     Nil,
@@ -93,6 +93,7 @@ impl TryFrom<u8> for OpCode {
             value if value == Greater as u8 => Ok(Greater),
             value if value == Less as u8 => Ok(Less),
             value if value == Comma as u8 => Ok(Comma),
+            value if value == Print as u8 => Ok(Print),
             _ => Err(ConversionError { from: value }),
         }
     }
@@ -101,5 +102,39 @@ impl TryFrom<u8> for OpCode {
 impl From<OpCode> for u8 {
     fn from(value: OpCode) -> Self {
         value as u8
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+    use OpCode::{self, *};
+
+    #[rstest]
+    #[case(Constant)]
+    #[case(Nil)]
+    #[case(True)]
+    #[case(False)]
+    #[case(Pop)]
+    #[case(GetGlobal)]
+    #[case(DefineGlobal)]
+    #[case(SetGlobal)]
+    #[case(Equal)]
+    #[case(Greater)]
+    #[case(Less)]
+    #[case(Add)]
+    #[case(Subtract)]
+    #[case(Multiply)]
+    #[case(Divide)]
+    #[case(Not)]
+    #[case(Negate)]
+    #[case(Print)]
+    #[case(Return)]
+    #[case(Comma)]
+    fn all_op_code_covered_by_try_from(#[case] op: OpCode) {
+        let from_u8: Result<OpCode, ConversionError> = OpCode::try_from(op as u8);
+        assert!(from_u8.is_ok());
+        assert_eq!(from_u8.unwrap(), op);
     }
 }

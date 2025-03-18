@@ -1,3 +1,5 @@
+use red_lox_ast::scanner::Location;
+
 use crate::interned_string::InternedString;
 
 
@@ -23,4 +25,11 @@ pub(crate) enum Instruction {
     Nil,
     Bool(bool),
     String(InternedString),
+}
+
+
+#[derive(Debug, Clone)]
+pub struct InstructionWithLocation {
+    pub instruction: Instruction,
+    pub location: Location,
 }

@@ -19,7 +19,7 @@ pub struct VirtualMachine<'a, 'b> {
     stack: [Option<Value>; STACK_MAX],
     stack_top: usize,
     out: &'b mut dyn Write,
-    strings: HashSet<InternedString>,
+    strings: HashMap<InternedString, Option<u8>>,
     globals: HashMap<InternedString, Value>,
 }
 
@@ -45,7 +45,11 @@ pub enum Error {
 }
 
 impl<'a, 'b> VirtualMachine<'a, 'b> {
-    pub fn new(chunk: &'a Chunk, strings: HashSet<InternedString>, out: &'b mut dyn Write) -> Self {
+    pub fn new(
+        chunk: &'a Chunk,
+        strings: HashMap<InternedString, Option<u8>>,
+        out: &'b mut dyn Write,
+    ) -> Self {
         Self {
             chunk,
             ip: 0,

@@ -1,4 +1,4 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 
 use crate::{
     instruction::{Instruction, InstructionWithLocation},
@@ -216,7 +216,7 @@ pub(crate) struct Parser<'a> {
     pub(crate) errors: Vec<Error>,
     pub(crate) current: TokenWithLocation,
     pub(crate) prev: TokenWithLocation,
-    pub(crate) strings: HashSet<InternedString>,
+    pub(crate) strings: HashMap<InternedString, Option<u8>>,
 }
 
 impl<'a> Parser<'a> {
@@ -233,7 +233,7 @@ impl<'a> Parser<'a> {
                 token: Token::Eof,
                 location: Location::default(),
             },
-            strings: HashSet::new(),
+            strings: HashMap::new(),
         };
         parser.advance().expect("No token available in Scanner.");
         parser

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use red_lox_ast::scanner::{Location, Scanner};
 
@@ -13,7 +13,7 @@ use crate::{
 
 pub struct CompilationResult {
     pub chunk: Chunk,
-    pub strings: HashSet<InternedString>,
+    pub strings: HashMap<InternedString, Option<u8>>,
 }
 
 pub struct Compiler<'a> {
@@ -117,12 +117,30 @@ impl<'a> Compiler<'a> {
     }
 
     fn add_constant(&mut self, value: Value, location: &Location) -> Result<u8, Error> {
-        let index = u8::try_from(self.chunk.get_num_constants()).map_err(move |_| {
+        match &value {
+            Value::String(s) => match self.parser.strings.get(s) {
+                Some(Some(v)) => return Ok(*v),
+                _ => {
+                    // this is Some(None)
+                    let index = self.get_next_index_for_constant(&location)?;
+                    self.parser.strings.insert(s.clone(), Some(index));
+                    self.chunk.add_constant(value);
+                    Ok(index)
+                }
+            },
+            _ => {
+                let index = self.get_next_index_for_constant(&location)?;
+                self.chunk.add_constant(value);
+                Ok(index)
+            }
+        }
+    }
+
+    fn get_next_index_for_constant(&mut self, location: &Location) -> Result<u8, Error> {
+        u8::try_from(self.chunk.get_num_constants()).map_err(move |_| {
             Error::TooManyConstantsError {
                 location: location.clone(),
             }
-        })?;
-        self.chunk.add_constant(value);
-        Ok(index)
+        })
     }
 }

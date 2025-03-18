@@ -225,7 +225,7 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
     }
 
     fn read_byte(&mut self) -> u8 {
-        let v = self.chunk.code[self.ip];
+        let v = self.chunk.get_code(self.ip);
         self.ip += 1;
         v
     }

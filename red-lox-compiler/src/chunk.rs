@@ -1,7 +1,7 @@
-use crate::{instruction::Instruction, op_code::OpCode, value::Value};
+use crate::value::Value;
 
 pub struct Chunk {
-    pub(crate) code: Vec<u8>,
+    code: Vec<u8>,
     constants: Vec<Value>,
     lines: Vec<LineInfo>,
 }
@@ -13,13 +13,10 @@ struct LineInfo {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("[At line {line}] Failed to add a constant to the chunk since # of constants exeeded the range represented by u8.")]
-    TooManyConstantsError { line: usize },
-}
+pub enum Error {}
 
 impl Chunk {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             code: Vec::new(),
             constants: Vec::new(),
@@ -27,68 +24,16 @@ impl Chunk {
         }
     }
 
-    pub(crate) fn write(&mut self, instruction: Instruction, line: usize) -> Result<(), Error> {
-        let offset = self.code.len();
-        match instruction {
-            Instruction::Return => self.code.push(OpCode::Return.into()),
-            Instruction::Negate => self.code.push(OpCode::Negate.into()),
-            Instruction::Add => self.code.push(OpCode::Add.into()),
-            Instruction::Subtract => self.code.push(OpCode::Subtract.into()),
-            Instruction::Multiply => self.code.push(OpCode::Multiply.into()),
-            Instruction::Divide => self.code.push(OpCode::Divide.into()),
-            Instruction::Not => self.code.push(OpCode::Not.into()),
-            Instruction::Pop => self.code.push(OpCode::Pop.into()),
-            Instruction::Equal => self.code.push(OpCode::Equal.into()),
-            Instruction::Less => self.code.push(OpCode::Less.into()),
-            Instruction::Greater => self.code.push(OpCode::Greater.into()),
-            Instruction::Print => self.code.push(OpCode::Print.into()),
-            Instruction::GetGlobal(id) => {
-                let index = self.add_constant(Value::String(id), line)?;
-                self.code.push(OpCode::GetGlobal.into());
-                self.code.push(index);
-            }
-            Instruction::DefineGlobal(id) => {
-                let index = self.add_constant(Value::String(id), line)?;
-                self.code.push(OpCode::DefineGlobal.into());
-                self.code.push(index);
-            }
-            Instruction::SetGlobal(id) => {
-                let index = self.add_constant(Value::String(id), line)?;
-                self.code.push(OpCode::SetGlobal.into());
-                self.code.push(index);
-            }
-            Instruction::Constant(v) => {
-                let index = self.add_constant(Value::Number(v), line)?;
-                self.code.push(OpCode::Constant.into());
-                self.code.push(index);
-            }
-            Instruction::Nil => self.code.push(OpCode::Nil.into()),
-            Instruction::Bool(b) => self
-                .code
-                .push((if b { OpCode::True } else { OpCode::False }).into()),
-            Instruction::String(s) => {
-                let index = self.add_constant(Value::String(s), line)?;
-                self.code.push(OpCode::Constant.into());
-                self.code.push(index);
-            }
-            Instruction::Comma => self.code.push(OpCode::Comma.into()),
-        }
-        match self.lines.last() {
-            Some(line_info) if line_info.line == line => (),
-            _ => self.lines.push(LineInfo { offset, line }),
-        }
-        Ok(())
-    }
-
-    fn add_constant(&mut self, value: Value, line: usize) -> Result<u8, Error> {
-        let index = u8::try_from(self.constants.len())
-            .map_err(move |_| Error::TooManyConstantsError { line })?;
-        self.constants.push(value);
-        Ok(index)
+    pub(crate) fn add_constant(&mut self, v: Value) {
+        self.constants.push(v);
     }
 
     pub(crate) fn get_constant(&self, index: usize) -> Value {
         self.constants[index].clone()
+    }
+
+    pub(crate) fn get_num_constants(&self) -> usize {
+        self.constants.len()
     }
 
     pub(crate) fn line_of(&self, offset: usize) -> usize {
@@ -101,6 +46,25 @@ impl Chunk {
         {
             Ok(index) => self.lines[index].line,
             Err(index) => self.lines[index - 1].line,
+        }
+    }
+
+    pub(crate) fn add_code(&mut self, code: u8) {
+        self.code.push(code);
+    }
+
+    pub(crate) fn get_code(&self, offset: usize) -> u8 {
+        self.code[offset]
+    }
+
+    pub(crate) fn code_len(&self) -> usize {
+        self.code.len()
+    }
+
+    pub(crate) fn maybe_update_line_info(&mut self, offset: usize, line: usize) {
+        match self.lines.last() {
+            Some(line_info) if line_info.line == line => (),
+            _ => self.lines.push(LineInfo { offset, line }),
         }
     }
 }

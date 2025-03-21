@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     io::Write,
 };
 
@@ -88,6 +88,14 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
                 OpCode::False => self.push(Value::Bool(false)),
                 OpCode::Pop => {
                     self.pop()?;
+                }
+                OpCode::GetLocal => {
+                    let index = self.read_byte();
+                    self.push(self.stack[index as usize].clone().unwrap());
+                }
+                OpCode::SetLocal => {
+                    let index = self.read_byte();
+                    self.stack[index as usize].replace(self.peek(0)?.clone());
                 }
                 OpCode::GetGlobal => match self.get_constant() {
                     Value::String(s) => {

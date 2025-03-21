@@ -81,6 +81,14 @@ impl<'a> Compiler<'a> {
             Instruction::Less => self.chunk.add_code(OpCode::Less.into()),
             Instruction::Greater => self.chunk.add_code(OpCode::Greater.into()),
             Instruction::Print => self.chunk.add_code(OpCode::Print.into()),
+            Instruction::GetLocal(index) => {
+                self.chunk.add_code(OpCode::GetLocal.into());
+                self.chunk.add_code(index);
+            }
+            Instruction::SetLocal(index) => {
+                self.chunk.add_code(OpCode::SetLocal.into());
+                self.chunk.add_code(index);
+            }
             Instruction::GetGlobal(id) => {
                 let index = self.add_constant(Value::String(id), location)?;
                 self.chunk.add_code(OpCode::GetGlobal.into());

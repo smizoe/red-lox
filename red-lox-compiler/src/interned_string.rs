@@ -1,6 +1,6 @@
 use std::{
     borrow::Borrow,
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fmt::Display,
     rc::Rc,
 };
@@ -11,6 +11,12 @@ pub struct InternedString(Rc<String>);
 impl Borrow<str> for InternedString {
     fn borrow(&self) -> &str {
         &self.0
+    }
+}
+
+impl AsRef<str> for InternedString {
+    fn as_ref(&self) -> &str {
+        self.0.as_str()
     }
 }
 

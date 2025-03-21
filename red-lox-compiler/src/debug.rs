@@ -28,6 +28,10 @@ pub fn disassemble_instruction(offset: usize, chunk: &Chunk) -> usize {
                         chunk.get_constant(usize::from(constant_index))
                     );
                 }
+                OpCode::GetLocal | OpCode::SetLocal => {
+                    let stack_index = chunk.get_code(offset + 1);
+                    println!("{:<16} {:04}", op, stack_index);
+                }
                 OpCode::Negate
                 | OpCode::Print
                 | OpCode::Return

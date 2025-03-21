@@ -1,4 +1,7 @@
-use std::collections::{HashMap, VecDeque};
+use std::{
+    collections::{HashMap, VecDeque},
+    ops::{Deref, DerefMut},
+};
 
 use crate::{
     instruction::{Instruction, InstructionWithLocation},
@@ -208,6 +211,67 @@ pub enum Error {
     UnexpectedTokenError(String),
     #[error("{location} The lhs of assignment is invalid.")]
     InvalidAssignmentError { location: Location },
+    #[error("{location} Too many local variables in the current scope.")]
+    TooManyLocalVariablesError { location: Location },
+    #[error("{location} Variable '{name}' is already defined in the current scope.")]
+    DuplicateVariableDeclarationError { location: Location, name: String },
+    #[error("{location} Can't read local variable '{name}' in its own initializer.")]
+    UninititalizedVariableAccessError { location: Location, name: String },
+}
+
+struct Local {
+    name: InternedString,
+    depth: i32,
+}
+
+pub(crate) struct LocalScope<'a, 'b> {
+    parser: &'b mut Parser<'a>,
+    left_brace_location: Location,
+}
+
+impl<'a, 'b> LocalScope<'a, 'b> {
+    pub fn new(parser: &'b mut Parser<'a>) -> Self {
+        parser.scope_depth += 1;
+        let location = parser.prev.location.clone();
+        Self {
+            parser,
+            left_brace_location: location,
+        }
+    }
+}
+
+impl<'a, 'b> Drop for LocalScope<'a, 'b> {
+    fn drop(&mut self) {
+        self.parser.scope_depth -= 1;
+        let location = self.left_brace_location.clone();
+
+        let mut upper = self.locals.len();
+        for i in (0..self.locals.len()).rev() {
+            if self.locals[i].depth <= self.scope_depth() {
+                break;
+            }
+            self.instructions.push_back(InstructionWithLocation {
+                instruction: Instruction::Pop,
+                location: location.clone(),
+            });
+            upper = i;
+        }
+        self.locals.truncate(upper);
+    }
+}
+
+impl<'a, 'b> Deref for LocalScope<'a, 'b> {
+    type Target = Parser<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.parser
+    }
+}
+
+impl<'a, 'b> DerefMut for LocalScope<'a, 'b> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.parser
+    }
 }
 
 pub(crate) struct Parser<'a> {
@@ -217,6 +281,8 @@ pub(crate) struct Parser<'a> {
     pub(crate) current: TokenWithLocation,
     pub(crate) prev: TokenWithLocation,
     pub(crate) strings: HashMap<InternedString, Option<u8>>,
+    locals: Vec<Local>,
+    scope_depth: i32,
 }
 
 impl<'a> Parser<'a> {
@@ -234,9 +300,15 @@ impl<'a> Parser<'a> {
                 location: Location::default(),
             },
             strings: HashMap::new(),
+            locals: Vec::new(),
+            scope_depth: 0,
         };
         parser.advance().expect("No token available in Scanner.");
         parser
+    }
+
+    pub fn scope_depth(&self) -> i32 {
+        self.scope_depth
     }
 
     pub fn next_instruction(&mut self) -> Option<InstructionWithLocation> {
@@ -249,6 +321,10 @@ impl<'a> Parser<'a> {
             }
         }
         self.instructions.pop_front()
+    }
+
+    fn enter(&mut self) -> LocalScope<'a, '_> {
+        LocalScope::new(self)
     }
 
     fn synchronize(&mut self) -> Result<(), Error> {
@@ -284,13 +360,16 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn next_token_is(&mut self, t: Token) -> Result<bool, Error> {
-        let is_same_type =
-            std::mem::discriminant(&t) == std::mem::discriminant(&self.current.token);
+    fn next_token_is(&mut self, t: &Token) -> Result<bool, Error> {
+        let is_same_type = self.check(t);
         if is_same_type {
             self.advance()?;
         }
         Ok(is_same_type)
+    }
+
+    fn check(&self, t: &Token) -> bool {
+        std::mem::discriminant(t) == std::mem::discriminant(&self.current.token)
     }
 
     fn consume<F>(&mut self, t: Token, msg_gen: F) -> Result<TokenWithLocation, Error>
@@ -316,7 +395,7 @@ impl<'a> Parser<'a> {
             self.parse_next_expr(get_rule(&self.prev.token).infix, /*unused*/ can_assign)?;
         }
 
-        if can_assign && self.next_token_is(Token::Equal)? {
+        if can_assign && self.next_token_is(&Token::Equal)? {
             return Err(Error::InvalidAssignmentError {
                 location: self.prev.location.clone(),
             });
@@ -325,7 +404,7 @@ impl<'a> Parser<'a> {
     }
 
     fn declaration(&mut self) -> Result<(), Error> {
-        if self.next_token_is(Token::Var)? {
+        if self.next_token_is(&Token::Var)? {
             self.var_declaration()
         } else {
             self.statement()
@@ -341,7 +420,12 @@ impl<'a> Parser<'a> {
             )
         })?;
 
-        if self.next_token_is(Token::Equal)? {
+        let name = intern_string(&mut self.strings, ident.token.id_name());
+        if self.scope_depth > 0 {
+            self.declare_local(name.clone(), &ident.location)?;
+        }
+
+        if self.next_token_is(&Token::Equal)? {
             self.expression()?;
         } else {
             instructions.push(InstructionWithLocation {
@@ -355,20 +439,74 @@ impl<'a> Parser<'a> {
                 t.location, t.token
             )
         })?;
-        instructions.push(InstructionWithLocation {
-            instruction: Instruction::DefineGlobal(intern_string(
-                &mut self.strings,
-                ident.token.id_name(),
-            )),
-            location: ident.location.clone(),
-        });
+
+        if self.scope_depth == 0 {
+            instructions.push(InstructionWithLocation {
+                instruction: Instruction::DefineGlobal(name),
+                location: ident.location.clone(),
+            });
+        } else {
+            self.locals.last_mut().unwrap().depth = self.scope_depth;
+        }
         self.instructions.extend(instructions);
         Ok(())
     }
 
+    fn declare_local(
+        &mut self,
+        name: InternedString,
+        ident_location: &Location,
+    ) -> Result<(), Error> {
+        if self.locals.len() == usize::from(u8::MAX) {
+            return Err(Error::TooManyLocalVariablesError {
+                location: ident_location.clone(),
+            });
+        }
+
+        self.locals.push(Local {
+            name: name.clone(),
+            depth: -1,
+        });
+
+        for local in self.locals.iter().rev() {
+            if local.depth < self.scope_depth {
+                break;
+            }
+
+            if local.name == name {
+                return Err(Error::DuplicateVariableDeclarationError {
+                    location: ident_location.clone(),
+                    name: name.to_string(),
+                });
+            }
+        }
+
+        self.locals.last_mut().unwrap().depth = self.scope_depth;
+        Ok(())
+    }
+
+    fn resolve_local(&self, name: &str, location: &Location) -> Result<Option<u8>, Error> {
+        for i in (0..self.locals.len()).rev() {
+            let local = &self.locals[i];
+            if local.depth == -1 {
+                return Err(Error::UninititalizedVariableAccessError {
+                    location: location.clone(),
+                    name: name.to_string(),
+                });
+            }
+            if local.name.as_ref() == name {
+                return Ok(Some(u8::try_from(i).unwrap()));
+            }
+        }
+        Ok(None)
+    }
+
     fn statement(&mut self) -> Result<(), Error> {
-        if self.next_token_is(Token::Print)? {
+        if self.next_token_is(&Token::Print)? {
             self.print_statement()
+        } else if self.next_token_is(&Token::LeftBrace)? {
+            let mut scope = self.enter();
+            scope.block()
         } else {
             self.expression_statement()
         }
@@ -387,6 +525,19 @@ impl<'a> Parser<'a> {
             instruction: Instruction::Print,
             location,
         });
+        Ok(())
+    }
+
+    fn block(&mut self) -> Result<(), Error> {
+        while !self.check(&Token::RightBrace) && !self.check(&Token::Eof) {
+            self.declaration()?;
+        }
+        self.consume(Token::RightBrace, |t| {
+            format!(
+                "{} Expected '}}' after a block, found {:?}.",
+                t.location, t.token
+            )
+        })?;
         Ok(())
     }
 
@@ -433,15 +584,20 @@ impl<'a> Parser<'a> {
 
     fn variable(&mut self, can_assign: bool) -> Result<(), Error> {
         let id = intern_string(&mut self.strings, self.prev.token.id_name());
-        let instruction = if can_assign && self.next_token_is(Token::Equal)? {
+        let local_arg = self.resolve_local(id.as_ref(), &self.prev.location)?;
+        let instruction = if can_assign && self.next_token_is(&Token::Equal)? {
             self.assignment()?;
             InstructionWithLocation {
-                instruction: Instruction::SetGlobal(id),
+                instruction: local_arg
+                    .map(|v| Instruction::SetLocal(v))
+                    .unwrap_or_else(move || Instruction::SetGlobal(id)),
                 location: self.prev.location.clone(),
             }
         } else {
             InstructionWithLocation {
-                instruction: Instruction::GetGlobal(id),
+                instruction: local_arg
+                    .map(|v| Instruction::GetLocal(v))
+                    .unwrap_or_else(move || Instruction::GetGlobal(id)),
                 location: self.prev.location.clone(),
             }
         };

@@ -7,6 +7,8 @@ pub enum OpCode {
     True,
     False,
     Pop,
+    GetLocal,
+    SetLocal,
     GetGlobal,
     DefineGlobal,
     SetGlobal,
@@ -29,7 +31,7 @@ impl OpCode {
     pub fn len(&self) -> usize {
         use OpCode::*;
         match self {
-            Constant | DefineGlobal => 2,
+            Constant | GetLocal | SetLocal | DefineGlobal | GetGlobal | SetGlobal => 2,
             _ => 1,
         }
     }
@@ -43,6 +45,8 @@ impl Display for OpCode {
             OpCode::True => write!(f, "OP_TRUE"),
             OpCode::False => write!(f, "OP_FALSE"),
             OpCode::Pop => write!(f, "OP_POP"),
+            OpCode::GetLocal => write!(f, "OP_GET_LOCAL"),
+            OpCode::SetLocal => write!(f, "OP_SET_LOCAL"),
             OpCode::GetGlobal => write!(f, "OP_GET_GLOBAL"),
             OpCode::DefineGlobal => write!(f, "OP_DEFINE_GLOBAL"),
             OpCode::SetGlobal => write!(f, "OP_SET_GLOBAL"),
@@ -86,6 +90,8 @@ impl TryFrom<u8> for OpCode {
             value if value == Divide as u8 => Ok(Divide),
             value if value == Not as u8 => Ok(Not),
             value if value == Pop as u8 => Ok(Pop),
+            value if value == GetLocal as u8 => Ok(GetLocal),
+            value if value == SetLocal as u8 => Ok(SetLocal),
             value if value == GetGlobal as u8 => Ok(GetGlobal),
             value if value == DefineGlobal as u8 => Ok(DefineGlobal),
             value if value == SetGlobal as u8 => Ok(SetGlobal),
@@ -117,6 +123,8 @@ mod tests {
     #[case(True)]
     #[case(False)]
     #[case(Pop)]
+    #[case(GetLocal)]
+    #[case(SetLocal)]
     #[case(GetGlobal)]
     #[case(DefineGlobal)]
     #[case(SetGlobal)]

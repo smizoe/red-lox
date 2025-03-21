@@ -11,6 +11,8 @@ pub(crate) enum Instruction {
     Multiply,
     Divide,
     Pop,
+    GetLocal(u8),
+    SetLocal(u8),
     GetGlobal(InternedString),
     DefineGlobal(InternedString),
     SetGlobal(InternedString),

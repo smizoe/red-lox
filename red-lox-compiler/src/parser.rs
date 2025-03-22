@@ -4,8 +4,9 @@ use std::{
 };
 
 use crate::{
-    instruction::{Instruction, InstructionWithLocation},
+    instruction::{Arguments, InstructionWithLocation},
     interned_string::{intern_string, InternedString},
+    op_code::OpCode,
 };
 
 use red_lox_ast::scanner::{
@@ -251,7 +252,8 @@ impl<'a, 'b> Drop for LocalScope<'a, 'b> {
                 break;
             }
             self.instructions.push_back(InstructionWithLocation {
-                instruction: Instruction::Pop,
+                op_code: OpCode::Pop,
+                args: Arguments::None,
                 location: location.clone(),
             });
             upper = i;
@@ -429,7 +431,8 @@ impl<'a> Parser<'a> {
             self.expression()?;
         } else {
             instructions.push(InstructionWithLocation {
-                instruction: Instruction::Nil,
+                op_code: OpCode::Nil,
+                args: Arguments::None,
                 location: ident.location.clone(),
             });
         }
@@ -442,7 +445,8 @@ impl<'a> Parser<'a> {
 
         if self.scope_depth == 0 {
             instructions.push(InstructionWithLocation {
-                instruction: Instruction::DefineGlobal(name),
+                op_code: OpCode::DefineGlobal,
+                args: Arguments::String(name),
                 location: ident.location.clone(),
             });
         } else {
@@ -522,7 +526,8 @@ impl<'a> Parser<'a> {
             )
         })?;
         self.instructions.push_back(InstructionWithLocation {
-            instruction: Instruction::Print,
+            op_code: OpCode::Print,
+            args: Arguments::None,
             location,
         });
         Ok(())
@@ -551,7 +556,8 @@ impl<'a> Parser<'a> {
             )
         })?;
         self.instructions.push_back(InstructionWithLocation {
-            instruction: Instruction::Pop,
+            op_code: OpCode::Pop,
+            args: Arguments::None,
             location,
         });
         Ok(())
@@ -584,20 +590,21 @@ impl<'a> Parser<'a> {
 
     fn variable(&mut self, can_assign: bool) -> Result<(), Error> {
         let id = intern_string(&mut self.strings, self.prev.token.id_name());
-        let local_arg = self.resolve_local(id.as_ref(), &self.prev.location)?;
+        let (set_op, get_op, args) = match self.resolve_local(id.as_ref(), &self.prev.location)? {
+            Some(v) => (OpCode::SetLocal, OpCode::GetLocal, Arguments::Offset(v)),
+            None => (OpCode::SetGlobal, OpCode::GetGlobal, Arguments::String(id)),
+        };
         let instruction = if can_assign && self.next_token_is(&Token::Equal)? {
             self.assignment()?;
             InstructionWithLocation {
-                instruction: local_arg
-                    .map(|v| Instruction::SetLocal(v))
-                    .unwrap_or_else(move || Instruction::SetGlobal(id)),
+                op_code: set_op,
+                args,
                 location: self.prev.location.clone(),
             }
         } else {
             InstructionWithLocation {
-                instruction: local_arg
-                    .map(|v| Instruction::GetLocal(v))
-                    .unwrap_or_else(move || Instruction::GetGlobal(id)),
+                op_code: get_op,
+                args,
                 location: self.prev.location.clone(),
             }
         };
@@ -622,7 +629,8 @@ impl<'a> Parser<'a> {
             _ => unreachable!(),
         };
         self.instructions.push_back(InstructionWithLocation {
-            instruction: Instruction::Constant(v),
+            op_code: OpCode::Constant,
+            args: Arguments::Number(v),
             location: self.prev.location.clone(),
         });
         Ok(())
@@ -635,21 +643,23 @@ impl<'a> Parser<'a> {
         };
         let v = intern_string(&mut self.strings, s);
         self.instructions.push_back(InstructionWithLocation {
-            instruction: Instruction::String(v),
+            op_code: OpCode::Constant,
+            args: Arguments::String(v),
             location: self.prev.location.clone(),
         });
         Ok(())
     }
 
     fn literal(&mut self) -> Result<(), Error> {
-        let instruction = match &self.prev.token {
-            Token::Nil => Instruction::Nil,
-            Token::True => Instruction::Bool(true),
-            Token::False => Instruction::Bool(false),
+        let op_code = match &self.prev.token {
+            Token::Nil => OpCode::Nil,
+            Token::True => OpCode::True,
+            Token::False => OpCode::False,
             _ => unreachable!(),
         };
         self.instructions.push_back(InstructionWithLocation {
-            instruction,
+            op_code,
+            args: Arguments::None,
             location: self.prev.location.clone(),
         });
         Ok(())
@@ -657,11 +667,12 @@ impl<'a> Parser<'a> {
 
     fn unary(&mut self) -> Result<(), Error> {
         let instruction = InstructionWithLocation {
-            instruction: match &self.prev.token {
-                Token::Minus => Instruction::Negate,
-                Token::Bang => Instruction::Not,
+            op_code: match &self.prev.token {
+                Token::Minus => OpCode::Negate,
+                Token::Bang => OpCode::Not,
                 _ => unreachable!(),
             },
+            args: Arguments::None,
             location: self.prev.location.clone(),
         };
         self.parse_precedence(Precedence::Unary)?;
@@ -670,25 +681,26 @@ impl<'a> Parser<'a> {
     }
 
     fn binary(&mut self) -> Result<(), Error> {
-        let instructions: &[Instruction] = match &self.prev.token {
-            Token::Minus => &[Instruction::Subtract],
-            Token::Plus => &[Instruction::Add],
-            Token::Slash => &[Instruction::Divide],
-            Token::Star => &[Instruction::Multiply],
-            Token::EqualEqual => &[Instruction::Equal],
-            Token::Greater => &[Instruction::Greater],
-            Token::Less => &[Instruction::Less],
-            Token::BangEqual => &[Instruction::Equal, Instruction::Not],
-            Token::GreaterEqual => &[Instruction::Less, Instruction::Not],
-            Token::LessEqual => &[Instruction::Greater, Instruction::Not],
-            Token::Comma => &[Instruction::Comma],
+        let op_codes: &[OpCode] = match &self.prev.token {
+            Token::Minus => &[OpCode::Subtract],
+            Token::Plus => &[OpCode::Add],
+            Token::Slash => &[OpCode::Divide],
+            Token::Star => &[OpCode::Multiply],
+            Token::EqualEqual => &[OpCode::Equal],
+            Token::Greater => &[OpCode::Greater],
+            Token::Less => &[OpCode::Less],
+            Token::BangEqual => &[OpCode::Equal, OpCode::Not],
+            Token::GreaterEqual => &[OpCode::Less, OpCode::Not],
+            Token::LessEqual => &[OpCode::Greater, OpCode::Not],
+            Token::Comma => &[OpCode::Comma],
             _ => unreachable!(),
         };
         let location = self.current.location.clone();
         self.parse_precedence(get_rule(&self.prev.token).precedence.plusone())?;
-        for instruction in instructions {
+        for &op_code in op_codes {
             self.instructions.push_back(InstructionWithLocation {
-                instruction: instruction.clone(),
+                op_code,
+                args: Arguments::None,
                 location: location.clone(),
             });
         }

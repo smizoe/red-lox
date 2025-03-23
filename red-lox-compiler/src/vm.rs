@@ -155,10 +155,14 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
                     writeln!(self.out, "{}", v).expect("Failed to write to output.");
                 }
                 OpCode::JumpIfFalse | OpCode::Jump => {
-                    let offset = self.read_short();
-                    if self.peek(0)?.is_falsy() {
-                        self.ip += usize::from(offset);
+                    let jump_size = self.read_short();
+                    if op == OpCode::Jump || self.peek(0)?.is_falsy() {
+                        self.ip += usize::from(jump_size);
                     }
+                }
+                OpCode::Loop => {
+                    let jump_size = self.read_short();
+                    self.ip -= usize::from(jump_size);
                 }
                 OpCode::Return => {
                     return Ok(());

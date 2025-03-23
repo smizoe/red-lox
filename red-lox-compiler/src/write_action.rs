@@ -35,12 +35,19 @@ impl Arguments {
 
 #[derive(Debug, Clone)]
 pub(crate) enum WriteAction {
+    // Writes the op_code into the chunk.
     OpCodeWrite {
         op_code: OpCode,
         args: Arguments,
         location: Location,
     },
+    // Applies the back-patching of the jump destination.
     BackPatchJumpLocation {
+        op_code: OpCode,
+        location: Location,
+    },
+    // Adds a label to be used as a jump target.
+    AddLabel {
         op_code: OpCode,
         location: Location,
     },
@@ -51,6 +58,7 @@ impl WriteAction {
         match self {
             WriteAction::OpCodeWrite { location, .. } => location,
             WriteAction::BackPatchJumpLocation { location, .. } => location,
+            WriteAction::AddLabel { location, .. } => location,
         }
     }
 }

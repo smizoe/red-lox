@@ -24,6 +24,7 @@ pub enum OpCode {
     Print,
     Jump,
     JumpIfFalse,
+    Loop,
     Return,
     Comma,
 }
@@ -33,7 +34,7 @@ impl OpCode {
     pub fn len(&self) -> usize {
         use OpCode::*;
         match self {
-            JumpIfFalse => 3,
+            JumpIfFalse | Jump | Loop => 3,
             Constant | GetLocal | SetLocal | DefineGlobal | GetGlobal | SetGlobal => 2,
             _ => 1,
         }
@@ -60,6 +61,7 @@ impl Display for OpCode {
             OpCode::Print => write!(f, "OP_PRINT"),
             OpCode::Jump => write!(f, "OP_JUMP"),
             OpCode::JumpIfFalse => write!(f, "OP_JUMP_IF_FALSE"),
+            OpCode::Loop => write!(f, "OP_LOOP"),
             OpCode::Return => write!(f, "OP_RETURN"),
             OpCode::Add => write!(f, "OP_ADD"),
             OpCode::Subtract => write!(f, "OP_SUBTRACT"),
@@ -144,7 +146,9 @@ mod tests {
     #[case(Not)]
     #[case(Negate)]
     #[case(Print)]
+    #[case(Jump)]
     #[case(JumpIfFalse)]
+    #[case(Loop)]
     #[case(Return)]
     #[case(Comma)]
     fn all_op_code_covered_by_try_from(#[case] op: OpCode) {

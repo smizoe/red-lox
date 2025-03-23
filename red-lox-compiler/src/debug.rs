@@ -32,12 +32,13 @@ pub fn disassemble_instruction(offset: usize, chunk: &Chunk) -> usize {
                     let stack_index = chunk.get_code(offset + 1);
                     println!("{:<16} {:04}", op, stack_index);
                 }
-                OpCode::Jump | OpCode::JumpIfFalse => {
+                OpCode::Jump | OpCode::JumpIfFalse | OpCode::Loop => {
                     let jump = u16::from_be_bytes([
                         chunk.get_code(offset + 1),
                         chunk.get_code(offset + 2),
                     ]);
                     let next_location = match op {
+                        OpCode::Loop => offset + op.len() - usize::from(jump),
                         _ => offset + op.len() + usize::from(jump),
                     };
                     println!("{:<16} {:04} -> {}", op, offset, next_location);

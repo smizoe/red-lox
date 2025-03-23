@@ -4,11 +4,11 @@ use red_lox_ast::scanner::{Location, Scanner};
 
 use crate::{
     chunk::Chunk,
-    instruction::{Arguments, WriteAction},
     interned_string::InternedString,
     op_code::OpCode,
     parser::Parser,
     value::Value,
+    write_action::{Arguments, WriteAction},
 };
 
 pub struct CompilationResult {
@@ -117,6 +117,10 @@ impl<'a> Compiler<'a> {
             WriteAction::BackPatchJumpLocation { op_code, location } => {
                 self.back_patch_jump_location(*op_code, location.clone())
             }
+            WriteAction::AddLabel { op_code, location } => {
+                self.add_label(*op_code, location.clone());
+                Ok(())
+            }
         }
     }
 
@@ -171,13 +175,38 @@ impl<'a> Compiler<'a> {
             }
             OpCode::JumpIfFalse | OpCode::Jump => {
                 self.chunk.add_code(op_code.into());
+                self.add_label(op_code, location.clone());
                 self.chunk.add_code(u8::MAX);
                 self.chunk.add_code(u8::MAX);
+            }
+            OpCode::Loop => {
+                self.chunk.add_code(op_code.into());
+                match self
+                    .back_patch_location
+                    .remove(&BackPatchKey(op_code, location.clone()))
+                {
+                    Some(loop_start) => {
+                        let jump = self.chunk.code_len() - loop_start + 2;
+                        let values = u16::try_from(jump)
+                            .map_err(|_| Error::TooLongJumpError {
+                                location: location.clone(),
+                            })?
+                            .to_be_bytes();
+                        self.chunk.add_code(values[0]);
+                        self.chunk.add_code(values[1]);
+                    }
+                    None => unreachable!(),
+                }
             }
             _ => self.chunk.add_code(op_code.into()),
         }
         self.chunk.maybe_update_line_info(offset, location.line);
         Ok(())
+    }
+
+    fn add_label(&mut self, op_code: OpCode, location: Location) {
+        self.back_patch_location
+            .insert(BackPatchKey(op_code, location), self.chunk.code_len());
     }
 
     fn back_patch_jump_location(
@@ -190,12 +219,13 @@ impl<'a> Compiler<'a> {
             Some(offset) => match op_code {
                 OpCode::JumpIfFalse => {
                     let jump_offset = self.chunk.code_len() - offset - 2;
-                    let values =
-                        u16::try_from(jump_offset).map_err(|_| Error::TooLongJumpError {
+                    let values = u16::try_from(jump_offset)
+                        .map_err(|_| Error::TooLongJumpError {
                             location: key.1.clone(),
-                        })?.to_be_bytes();
+                        })?
+                        .to_be_bytes();
                     self.chunk.set_code(offset, values[0]);
-                    self.chunk.set_code(offset, values[1]);
+                    self.chunk.set_code(offset + 1, values[1]);
                 }
                 _ => unreachable!(),
             },

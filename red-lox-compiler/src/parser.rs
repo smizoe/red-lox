@@ -61,6 +61,8 @@ enum NextExpressionType {
     String,
     Literal,
     Variable,
+    And,
+    Or,
 }
 
 #[derive(Debug, Clone)]
@@ -171,7 +173,11 @@ fn get_rule(token: &Token) -> Rule {
             prefix: Number,
             infix: None,
         },
-        Token::And => Rule::default(),
+        Token::And => Rule {
+            precedence: Precedence::And,
+            prefix: None,
+            infix: And,
+        },
         Token::Break => Rule::default(),
         Token::Class => Rule::default(),
         Token::Else => Rule::default(),
@@ -188,7 +194,11 @@ fn get_rule(token: &Token) -> Rule {
             prefix: Literal,
             infix: None,
         },
-        Token::Or => Rule::default(),
+        Token::Or => Rule {
+            precedence: Precedence::Or,
+            prefix: None,
+            infix: Or,
+        },
         Token::Print => Rule::default(),
         Token::Return => Rule::default(),
         Token::Super => Rule::default(),
@@ -642,6 +652,8 @@ impl<'a> Parser<'a> {
             NextExpressionType::String => self.string(),
             NextExpressionType::Literal => self.literal(),
             NextExpressionType::Variable => self.variable(can_assign),
+            NextExpressionType::And => self.and(),
+            NextExpressionType::Or => self.or(),
         }
     }
 
@@ -677,6 +689,28 @@ impl<'a> Parser<'a> {
                 t.location, t.token
             )
         })?;
+        Ok(())
+    }
+
+    fn and(&mut self) -> Result<(), Error> {
+        let and_token_location = self.prev.location.clone();
+        let end_jump = self.emit_jump(OpCode::JumpIfFalse, and_token_location.clone());
+        self.write_pop(and_token_location);
+        self.parse_precedence(Precedence::And)?;
+        end_jump.patch(&mut self.pending_writes);
+        Ok(())
+    }
+
+    fn or(&mut self) -> Result<(), Error> {
+        let or_token_location = self.prev.location.clone();
+        let else_jump = self.emit_jump(OpCode::JumpIfFalse, or_token_location.clone());
+        let end_jump = self.emit_jump(OpCode::Jump, or_token_location.clone());
+
+        else_jump.patch(&mut self.pending_writes);
+        self.write_pop(or_token_location);
+
+        self.parse_precedence(Precedence::Or)?;
+        end_jump.patch(&mut self.pending_writes);
         Ok(())
     }
 

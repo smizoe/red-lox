@@ -57,6 +57,10 @@ impl Chunk {
         self.code[offset]
     }
 
+    pub(crate) fn set_code(&mut self, offset: usize, value: u8) {
+        self.code[offset] = value;
+    }
+
     pub(crate) fn code_len(&self) -> usize {
         self.code.len()
     }

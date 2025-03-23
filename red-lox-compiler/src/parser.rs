@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    instruction::{Arguments, InstructionWithLocation},
+    instruction::{Arguments, WriteAction},
     interned_string::{intern_string, InternedString},
     op_code::OpCode,
 };
@@ -251,11 +251,7 @@ impl<'a, 'b> Drop for LocalScope<'a, 'b> {
             if self.locals[i].depth <= self.scope_depth() {
                 break;
             }
-            self.instructions.push_back(InstructionWithLocation {
-                op_code: OpCode::Pop,
-                args: Arguments::None,
-                location: location.clone(),
-            });
+            self.write_pop(location.clone());
             upper = i;
         }
         self.locals.truncate(upper);
@@ -276,9 +272,27 @@ impl<'a, 'b> DerefMut for LocalScope<'a, 'b> {
     }
 }
 
+struct BackPatchToken {
+    op_code: OpCode,
+    location: Location,
+}
+
+impl BackPatchToken {
+    pub fn new(op_code: OpCode, location: Location) -> Self {
+        Self { op_code, location }
+    }
+
+    pub fn patch(self, writes: &mut VecDeque<WriteAction>) {
+        writes.push_back(WriteAction::BackPatchJumpLocation {
+            op_code: self.op_code,
+            location: self.location,
+        });
+    }
+}
+
 pub(crate) struct Parser<'a> {
     scanner: Scanner<'a>,
-    instructions: VecDeque<InstructionWithLocation>,
+    pending_writes: VecDeque<WriteAction>,
     pub(crate) errors: Vec<Error>,
     pub(crate) current: TokenWithLocation,
     pub(crate) prev: TokenWithLocation,
@@ -291,7 +305,7 @@ impl<'a> Parser<'a> {
     pub fn new(scanner: Scanner<'a>) -> Self {
         let mut parser = Self {
             scanner,
-            instructions: VecDeque::new(),
+            pending_writes: VecDeque::new(),
             errors: Vec::new(),
             current: TokenWithLocation {
                 token: Token::Eof,
@@ -313,8 +327,8 @@ impl<'a> Parser<'a> {
         self.scope_depth
     }
 
-    pub fn next_instruction(&mut self) -> Option<InstructionWithLocation> {
-        if self.instructions.is_empty() && !self.scanner.is_at_end() {
+    pub fn next_write(&mut self) -> Option<WriteAction> {
+        if self.pending_writes.is_empty() && !self.scanner.is_at_end() {
             if let Err(e) = self.declaration() {
                 self.errors.push(e);
                 if let Err(e) = self.synchronize() {
@@ -322,7 +336,7 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        self.instructions.pop_front()
+        self.pending_writes.pop_front()
     }
 
     fn enter(&mut self) -> LocalScope<'a, '_> {
@@ -414,7 +428,7 @@ impl<'a> Parser<'a> {
     }
 
     fn var_declaration(&mut self) -> Result<(), Error> {
-        let mut instructions = Vec::with_capacity(2);
+        let mut writes = Vec::with_capacity(2);
         let ident = self.consume(IDENTIFIER_TOKEN, |t| {
             format!(
                 "{} Expected a variable name, found {:?}.",
@@ -430,7 +444,7 @@ impl<'a> Parser<'a> {
         if self.next_token_is(&Token::Equal)? {
             self.expression()?;
         } else {
-            instructions.push(InstructionWithLocation {
+            writes.push(WriteAction::OpCodeWrite {
                 op_code: OpCode::Nil,
                 args: Arguments::None,
                 location: ident.location.clone(),
@@ -444,7 +458,7 @@ impl<'a> Parser<'a> {
         })?;
 
         if self.scope_depth == 0 {
-            instructions.push(InstructionWithLocation {
+            writes.push(WriteAction::OpCodeWrite {
                 op_code: OpCode::DefineGlobal,
                 args: Arguments::String(name),
                 location: ident.location.clone(),
@@ -452,7 +466,7 @@ impl<'a> Parser<'a> {
         } else {
             self.locals.last_mut().unwrap().depth = self.scope_depth;
         }
-        self.instructions.extend(instructions);
+        self.pending_writes.extend(writes);
         Ok(())
     }
 
@@ -508,6 +522,8 @@ impl<'a> Parser<'a> {
     fn statement(&mut self) -> Result<(), Error> {
         if self.next_token_is(&Token::Print)? {
             self.print_statement()
+        } else if self.next_token_is(&Token::If)? {
+            self.if_statement()
         } else if self.next_token_is(&Token::LeftBrace)? {
             let mut scope = self.enter();
             scope.block()
@@ -525,12 +541,57 @@ impl<'a> Parser<'a> {
                 t.location, t.token
             )
         })?;
-        self.instructions.push_back(InstructionWithLocation {
+        self.pending_writes.push_back(WriteAction::OpCodeWrite {
             op_code: OpCode::Print,
             args: Arguments::None,
             location,
         });
         Ok(())
+    }
+
+    fn if_statement(&mut self) -> Result<(), Error> {
+        let if_token_location = self.prev.location.clone();
+        self.consume(Token::LeftParen, |t| {
+            format!("{} Expect '(' after 'if', found {:?}", t.location, t.token)
+        })?;
+        self.expression()?;
+        self.consume(Token::RightParen, |t| {
+            format!(
+                "{} Expect ')' after a condition, found {:?}",
+                t.location, t.token
+            )
+        })?;
+
+        let if_jump_token = self.emit_jump(OpCode::JumpIfFalse, if_token_location.clone());
+        self.write_pop(if_token_location.clone());
+        self.statement()?;
+
+        let skip_else_jump_token = self.emit_jump(OpCode::Jump, if_token_location.clone());
+        if_jump_token.patch(&mut self.pending_writes);
+        self.write_pop(if_token_location.clone());
+
+        if self.next_token_is(&Token::Else)? {
+            self.statement()?;
+        }
+        skip_else_jump_token.patch(&mut self.pending_writes);
+        Ok(())
+    }
+
+    fn emit_jump(&mut self, op_code: OpCode, location: Location) -> BackPatchToken {
+        self.pending_writes.push_back(WriteAction::OpCodeWrite {
+            op_code,
+            args: Arguments::None,
+            location: location.clone(),
+        });
+        BackPatchToken::new(op_code, location)
+    }
+
+    fn write_pop(&mut self, location: Location) {
+        self.pending_writes.push_back(WriteAction::OpCodeWrite {
+            op_code: OpCode::Pop,
+            args: Arguments::None,
+            location,
+        });
     }
 
     fn block(&mut self) -> Result<(), Error> {
@@ -555,11 +616,7 @@ impl<'a> Parser<'a> {
                 t.location, t.token
             )
         })?;
-        self.instructions.push_back(InstructionWithLocation {
-            op_code: OpCode::Pop,
-            args: Arguments::None,
-            location,
-        });
+        self.write_pop(location);
         Ok(())
     }
 
@@ -596,19 +653,19 @@ impl<'a> Parser<'a> {
         };
         let instruction = if can_assign && self.next_token_is(&Token::Equal)? {
             self.assignment()?;
-            InstructionWithLocation {
+            WriteAction::OpCodeWrite {
                 op_code: set_op,
                 args,
                 location: self.prev.location.clone(),
             }
         } else {
-            InstructionWithLocation {
+            WriteAction::OpCodeWrite {
                 op_code: get_op,
                 args,
                 location: self.prev.location.clone(),
             }
         };
-        self.instructions.push_back(instruction);
+        self.pending_writes.push_back(instruction);
         Ok(())
     }
 
@@ -628,7 +685,7 @@ impl<'a> Parser<'a> {
             Token::Number(v) => *v,
             _ => unreachable!(),
         };
-        self.instructions.push_back(InstructionWithLocation {
+        self.pending_writes.push_back(WriteAction::OpCodeWrite {
             op_code: OpCode::Constant,
             args: Arguments::Number(v),
             location: self.prev.location.clone(),
@@ -642,7 +699,7 @@ impl<'a> Parser<'a> {
             _ => unreachable!(),
         };
         let v = intern_string(&mut self.strings, s);
-        self.instructions.push_back(InstructionWithLocation {
+        self.pending_writes.push_back(WriteAction::OpCodeWrite {
             op_code: OpCode::Constant,
             args: Arguments::String(v),
             location: self.prev.location.clone(),
@@ -657,7 +714,7 @@ impl<'a> Parser<'a> {
             Token::False => OpCode::False,
             _ => unreachable!(),
         };
-        self.instructions.push_back(InstructionWithLocation {
+        self.pending_writes.push_back(WriteAction::OpCodeWrite {
             op_code,
             args: Arguments::None,
             location: self.prev.location.clone(),
@@ -666,7 +723,7 @@ impl<'a> Parser<'a> {
     }
 
     fn unary(&mut self) -> Result<(), Error> {
-        let instruction = InstructionWithLocation {
+        let instruction = WriteAction::OpCodeWrite {
             op_code: match &self.prev.token {
                 Token::Minus => OpCode::Negate,
                 Token::Bang => OpCode::Not,
@@ -676,7 +733,7 @@ impl<'a> Parser<'a> {
             location: self.prev.location.clone(),
         };
         self.parse_precedence(Precedence::Unary)?;
-        self.instructions.push_back(instruction);
+        self.pending_writes.push_back(instruction);
         Ok(())
     }
 
@@ -698,7 +755,7 @@ impl<'a> Parser<'a> {
         let location = self.current.location.clone();
         self.parse_precedence(get_rule(&self.prev.token).precedence.plusone())?;
         for &op_code in op_codes {
-            self.instructions.push_back(InstructionWithLocation {
+            self.pending_writes.push_back(WriteAction::OpCodeWrite {
                 op_code,
                 args: Arguments::None,
                 location: location.clone(),

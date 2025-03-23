@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    io::Write,
-};
+use std::{collections::HashMap, io::Write};
 
 use crate::{
     chunk::Chunk,
@@ -157,6 +154,12 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
                     let v = self.pop()?;
                     writeln!(self.out, "{}", v).expect("Failed to write to output.");
                 }
+                OpCode::JumpIfFalse | OpCode::Jump => {
+                    let offset = self.read_short();
+                    if self.peek(0)?.is_falsy() {
+                        self.ip += usize::from(offset);
+                    }
+                }
                 OpCode::Return => {
                     return Ok(());
                 }
@@ -239,6 +242,15 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
     fn read_byte(&mut self) -> u8 {
         let v = self.chunk.get_code(self.ip);
         self.ip += 1;
+        v
+    }
+
+    fn read_short(&mut self) -> u16 {
+        let v = u16::from_be_bytes([
+            self.chunk.get_code(self.ip),
+            self.chunk.get_code(self.ip + 2),
+        ]);
+        self.ip += 2;
         v
     }
 

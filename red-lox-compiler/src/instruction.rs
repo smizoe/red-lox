@@ -34,8 +34,23 @@ impl Arguments {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct InstructionWithLocation {
-    pub op_code: OpCode,
-    pub args: Arguments,
-    pub location: Location,
+pub(crate) enum WriteAction {
+    OpCodeWrite {
+        op_code: OpCode,
+        args: Arguments,
+        location: Location,
+    },
+    BackPatchJumpLocation {
+        op_code: OpCode,
+        location: Location,
+    },
+}
+
+impl WriteAction {
+    pub fn get_location(&self) -> &Location {
+        match self {
+            WriteAction::OpCodeWrite { location, .. } => location,
+            WriteAction::BackPatchJumpLocation { location, .. } => location,
+        }
+    }
 }

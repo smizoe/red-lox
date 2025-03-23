@@ -1,6 +1,6 @@
 use std::{convert::TryFrom, fmt::Display};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OpCode {
     Constant = 1,
     Nil,
@@ -22,6 +22,8 @@ pub enum OpCode {
     Not,
     Negate,
     Print,
+    Jump,
+    JumpIfFalse,
     Return,
     Comma,
 }
@@ -31,6 +33,7 @@ impl OpCode {
     pub fn len(&self) -> usize {
         use OpCode::*;
         match self {
+            JumpIfFalse => 3,
             Constant | GetLocal | SetLocal | DefineGlobal | GetGlobal | SetGlobal => 2,
             _ => 1,
         }
@@ -55,6 +58,8 @@ impl Display for OpCode {
             OpCode::Less => write!(f, "OP_LESS"),
             OpCode::Negate => write!(f, "OP_NEGATE"),
             OpCode::Print => write!(f, "OP_PRINT"),
+            OpCode::Jump => write!(f, "OP_JUMP"),
+            OpCode::JumpIfFalse => write!(f, "OP_JUMP_IF_FALSE"),
             OpCode::Return => write!(f, "OP_RETURN"),
             OpCode::Add => write!(f, "OP_ADD"),
             OpCode::Subtract => write!(f, "OP_SUBTRACT"),
@@ -100,6 +105,7 @@ impl TryFrom<u8> for OpCode {
             value if value == Less as u8 => Ok(Less),
             value if value == Comma as u8 => Ok(Comma),
             value if value == Print as u8 => Ok(Print),
+            value if value == JumpIfFalse as u8 => Ok(JumpIfFalse),
             _ => Err(ConversionError { from: value }),
         }
     }
@@ -138,6 +144,7 @@ mod tests {
     #[case(Not)]
     #[case(Negate)]
     #[case(Print)]
+    #[case(JumpIfFalse)]
     #[case(Return)]
     #[case(Comma)]
     fn all_op_code_covered_by_try_from(#[case] op: OpCode) {

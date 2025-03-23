@@ -4,7 +4,7 @@ use red_lox_ast::scanner::{Location, Scanner};
 
 use crate::{
     chunk::Chunk,
-    instruction::{Arguments, InstructionWithLocation},
+    instruction::{Arguments, WriteAction},
     interned_string::InternedString,
     op_code::OpCode,
     parser::Parser,
@@ -19,12 +19,18 @@ pub struct CompilationResult {
 pub struct Compiler<'a> {
     chunk: Chunk,
     parser: Parser<'a>,
+    back_patch_location: HashMap<BackPatchKey, usize>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct BackPatchKey(pub OpCode, pub Location);
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("{location} Failed to add a constant to the chunk since # of constants exeeded the range represented by u8.")]
     TooManyConstantsError { location: Location },
+    #[error("{location} Too much code to jump over.")]
+    TooLongJumpError { location: Location },
     #[error("{location} Unsupported argument '{args}' is passed to OpCode {op_code}")]
     UnsupportedArgumentError {
         op_code: OpCode,
@@ -35,27 +41,29 @@ pub enum Error {
     CompilationError(Vec<crate::parser::Error>),
 }
 
-fn try_get_offset_from(instruction: &InstructionWithLocation) -> Result<u8, Error> {
-    instruction
-        .args
-        .to_offset()
+fn try_get_offset_from(
+    op_code: OpCode,
+    args: &Arguments,
+    location: &Location,
+) -> Result<u8, Error> {
+    args.to_offset()
         .ok_or_else(|| Error::UnsupportedArgumentError {
-            op_code: instruction.op_code,
-            args: instruction.args.clone(),
-            location: instruction.location.clone(),
+            op_code,
+            args: args.clone(),
+            location: location.clone(),
         })
 }
 
 fn try_get_interned_string_from(
-    instruction: &InstructionWithLocation,
+    op_code: OpCode,
+    args: &Arguments,
+    location: &Location,
 ) -> Result<InternedString, Error> {
-    instruction
-        .args
-        .to_interned_string()
+    args.to_interned_string()
         .ok_or_else(|| Error::UnsupportedArgumentError {
-            op_code: instruction.op_code,
-            args: instruction.args.clone(),
-            location: instruction.location.clone(),
+            op_code,
+            args: args.clone(),
+            location: location.clone(),
         })
 }
 
@@ -64,14 +72,15 @@ impl<'a> Compiler<'a> {
         Self {
             chunk: Chunk::new(),
             parser: Parser::new(Scanner::new(text)),
+            back_patch_location: HashMap::new(),
         }
     }
 
     pub fn compile(&mut self) -> Result<(), Error> {
-        while let Some(instruction) = self.parser.next_instruction() {
-            self.write(&instruction)
+        while let Some(write_action) = self.parser.next_write() {
+            self.write(&write_action)
                 .map_err(|_| Error::TooManyConstantsError {
-                    location: instruction.location.clone(),
+                    location: write_action.get_location().clone(),
                 })?;
         }
         if !self.parser.errors.is_empty() {
@@ -80,7 +89,7 @@ impl<'a> Compiler<'a> {
             )));
         }
         let cur_loc = self.parser.current.location.clone();
-        self.write(&InstructionWithLocation {
+        self.write(&WriteAction::OpCodeWrite {
             op_code: OpCode::Return,
             args: Arguments::None,
             location: cur_loc,
@@ -98,38 +107,51 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn write(&mut self, instruction: &InstructionWithLocation) -> Result<(), Error> {
-        let InstructionWithLocation {
-            op_code,
-            args,
-            location,
-        } = instruction;
+    fn write(&mut self, write_action: &WriteAction) -> Result<(), Error> {
+        match write_action {
+            WriteAction::OpCodeWrite {
+                op_code,
+                args,
+                location,
+            } => self.write_op_code(*op_code, args, location),
+            WriteAction::BackPatchJumpLocation { op_code, location } => {
+                self.back_patch_jump_location(*op_code, location.clone())
+            }
+        }
+    }
+
+    fn write_op_code(
+        &mut self,
+        op_code: OpCode,
+        args: &Arguments,
+        location: &Location,
+    ) -> Result<(), Error> {
         let offset = self.chunk.code_len();
         match op_code {
             OpCode::GetLocal => {
-                let index = try_get_offset_from(instruction)?;
+                let index = try_get_offset_from(op_code, args, location)?;
                 self.chunk.add_code(OpCode::GetLocal.into());
                 self.chunk.add_code(index);
             }
             OpCode::SetLocal => {
-                let index = try_get_offset_from(instruction)?;
+                let index = try_get_offset_from(op_code, args, location)?;
                 self.chunk.add_code(OpCode::SetLocal.into());
                 self.chunk.add_code(index);
             }
             OpCode::GetGlobal => {
-                let id = try_get_interned_string_from(instruction)?;
+                let id = try_get_interned_string_from(op_code, args, location)?;
                 let index = self.add_constant(Value::String(id), location)?;
                 self.chunk.add_code(OpCode::GetGlobal.into());
                 self.chunk.add_code(index);
             }
             OpCode::DefineGlobal => {
-                let id = try_get_interned_string_from(instruction)?;
+                let id = try_get_interned_string_from(op_code, args, location)?;
                 let index = self.add_constant(Value::String(id), location)?;
                 self.chunk.add_code(OpCode::DefineGlobal.into());
                 self.chunk.add_code(index);
             }
             OpCode::SetGlobal => {
-                let id = try_get_interned_string_from(instruction)?;
+                let id = try_get_interned_string_from(op_code, args, location)?;
                 let index = self.add_constant(Value::String(id), location)?;
                 self.chunk.add_code(OpCode::SetGlobal.into());
                 self.chunk.add_code(index);
@@ -139,17 +161,46 @@ impl<'a> Compiler<'a> {
                     Arguments::Number(v) => self.add_constant(Value::Number(*v), location),
                     Arguments::String(s) => self.add_constant(Value::String(s.clone()), location),
                     _ => Err(Error::UnsupportedArgumentError {
-                        op_code: instruction.op_code,
-                        args: instruction.args.clone(),
-                        location: instruction.location.clone(),
+                        op_code,
+                        args: args.clone(),
+                        location: location.clone(),
                     }),
                 }?;
                 self.chunk.add_code(OpCode::Constant.into());
                 self.chunk.add_code(index);
             }
-            _ => self.chunk.add_code((*op_code).into()),
+            OpCode::JumpIfFalse | OpCode::Jump => {
+                self.chunk.add_code(op_code.into());
+                self.chunk.add_code(u8::MAX);
+                self.chunk.add_code(u8::MAX);
+            }
+            _ => self.chunk.add_code(op_code.into()),
         }
         self.chunk.maybe_update_line_info(offset, location.line);
+        Ok(())
+    }
+
+    fn back_patch_jump_location(
+        &mut self,
+        op_code: OpCode,
+        location: Location,
+    ) -> Result<(), Error> {
+        let key = BackPatchKey(op_code, location);
+        match self.back_patch_location.remove(&key) {
+            Some(offset) => match op_code {
+                OpCode::JumpIfFalse => {
+                    let jump_offset = self.chunk.code_len() - offset - 2;
+                    let values =
+                        u16::try_from(jump_offset).map_err(|_| Error::TooLongJumpError {
+                            location: key.1.clone(),
+                        })?.to_be_bytes();
+                    self.chunk.set_code(offset, values[0]);
+                    self.chunk.set_code(offset, values[1]);
+                }
+                _ => unreachable!(),
+            },
+            None => unreachable!(),
+        }
         Ok(())
     }
 

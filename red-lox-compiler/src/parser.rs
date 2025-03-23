@@ -619,7 +619,7 @@ impl<'a> Parser<'a> {
         })?;
         self.add_label(OpCode::Loop, while_token_location.clone());
         self.expression()?;
-        self.consume(Token::LeftParen, |t| {
+        self.consume(Token::RightParen, |t| {
             format!(
                 "{} Expected ')' after a condition, found {:?}",
                 t.location, t.token

@@ -154,11 +154,15 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
                     let v = self.pop()?;
                     writeln!(self.out, "{}", v).expect("Failed to write to output.");
                 }
-                OpCode::JumpIfFalse | OpCode::Jump => {
+                OpCode::JumpIfFalse => {
                     let jump_size = self.read_short();
-                    if op == OpCode::Jump || self.peek(0)?.is_falsy() {
+                    if self.peek(0)?.is_falsy() {
                         self.ip += usize::from(jump_size);
                     }
+                }
+                OpCode::Jump => {
+                    let jump_size = self.read_short();
+                    self.ip += usize::from(jump_size);
                 }
                 OpCode::Loop => {
                     let jump_size = self.read_short();
@@ -252,7 +256,7 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
     fn read_short(&mut self) -> u16 {
         let v = u16::from_be_bytes([
             self.chunk.get_code(self.ip),
-            self.chunk.get_code(self.ip + 2),
+            self.chunk.get_code(self.ip + 1),
         ]);
         self.ip += 2;
         v

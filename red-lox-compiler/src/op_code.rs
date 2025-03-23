@@ -108,6 +108,8 @@ impl TryFrom<u8> for OpCode {
             value if value == Comma as u8 => Ok(Comma),
             value if value == Print as u8 => Ok(Print),
             value if value == JumpIfFalse as u8 => Ok(JumpIfFalse),
+            value if value == Jump as u8 => Ok(Jump),
+            value if value == Loop as u8 => Ok(Loop),
             _ => Err(ConversionError { from: value }),
         }
     }

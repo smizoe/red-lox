@@ -217,7 +217,7 @@ impl<'a> Compiler<'a> {
         let key = BackPatchKey(op_code, location);
         match self.back_patch_location.remove(&key) {
             Some(offset) => match op_code {
-                OpCode::JumpIfFalse => {
+                OpCode::JumpIfFalse | OpCode::Jump => {
                     let jump_offset = self.chunk.code_len() - offset - 2;
                     let values = u16::try_from(jump_offset)
                         .map_err(|_| Error::TooLongJumpError {

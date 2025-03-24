@@ -4,6 +4,7 @@ use red_lox_ast::scanner::{Location, Scanner};
 
 use crate::{
     chunk::Chunk,
+    code_location_registry::{BackPatchLocationKey, CodeLocationRegistry, LabelKey, Usage},
     interned_string::InternedString,
     op_code::OpCode,
     parser::Parser,
@@ -19,11 +20,8 @@ pub struct CompilationResult {
 pub struct Compiler<'a> {
     chunk: Chunk,
     parser: Parser<'a>,
-    back_patch_location: HashMap<BackPatchKey, usize>,
+    code_location_registry: CodeLocationRegistry,
 }
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct BackPatchKey(pub OpCode, pub Location);
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -34,7 +32,7 @@ pub enum Error {
     #[error("{location} Unsupported argument '{args}' is passed to OpCode {op_code}")]
     UnsupportedArgumentError {
         op_code: OpCode,
-        args: Arguments,
+        args: String,
         location: Location,
     },
     #[error("{}", .0.into_iter().fold(String::new(), |acc,  e| format!("{}{}\n", acc, e)))]
@@ -49,7 +47,7 @@ fn try_get_offset_from(
     args.to_offset()
         .ok_or_else(|| Error::UnsupportedArgumentError {
             op_code,
-            args: args.clone(),
+            args: args.to_string(),
             location: location.clone(),
         })
 }
@@ -62,20 +60,24 @@ fn try_get_interned_string_from(
     args.to_interned_string()
         .ok_or_else(|| Error::UnsupportedArgumentError {
             op_code,
-            args: args.clone(),
+            args: args.to_string(),
             location: location.clone(),
         })
 }
 
 impl<'a> Compiler<'a> {
+    /// Creates a new compiler that compiles the given `text``.
     pub fn new(text: &'a str) -> Self {
         Self {
             chunk: Chunk::new(),
             parser: Parser::new(Scanner::new(text)),
-            back_patch_location: HashMap::new(),
+            code_location_registry: CodeLocationRegistry::new(),
         }
     }
 
+    /// Compiles the text passed to `Compiler::new` method.
+    /// Returns an Ok value when the compilation was successful.
+    /// An error value is returned when there is any error encountered during the compilation.
     pub fn compile(&mut self) -> Result<(), Error> {
         while let Some(write_action) = self.parser.next_write() {
             self.write(&write_action)
@@ -107,6 +109,8 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    /// Handles a single `WriteAction`.
+    /// See each function called internally for what occurs when each variant of the enum arrives.
     fn write(&mut self, write_action: &WriteAction) -> Result<(), Error> {
         match write_action {
             WriteAction::OpCodeWrite {
@@ -114,16 +118,17 @@ impl<'a> Compiler<'a> {
                 args,
                 location,
             } => self.write_op_code(*op_code, args, location),
-            WriteAction::BackPatchJumpLocation { op_code, location } => {
-                self.back_patch_jump_location(*op_code, location.clone())
+            WriteAction::BackPatchJumpLocation { usage, location } => {
+                self.back_patch_jump_location(*usage, location.clone())
             }
-            WriteAction::AddLabel { op_code, location } => {
-                self.add_label(*op_code, location.clone());
+            WriteAction::AddLabel { usage, location } => {
+                self.add_label(*usage, location.clone());
                 Ok(())
             }
         }
     }
 
+    /// Writes bytecodes based on the given OpCode and Argument.
     fn write_op_code(
         &mut self,
         op_code: OpCode,
@@ -166,7 +171,7 @@ impl<'a> Compiler<'a> {
                     Arguments::String(s) => self.add_constant(Value::String(s.clone()), location),
                     _ => Err(Error::UnsupportedArgumentError {
                         op_code,
-                        args: args.clone(),
+                        args: args.to_string(),
                         location: location.clone(),
                     }),
                 }?;
@@ -175,28 +180,17 @@ impl<'a> Compiler<'a> {
             }
             OpCode::JumpIfFalse | OpCode::Jump => {
                 self.chunk.add_code(op_code.into());
-                self.add_label(op_code, location.clone());
+                self.add_backpatch_location(op_code, args.to_usage().unwrap(), location.clone());
                 self.chunk.add_code(u8::MAX);
                 self.chunk.add_code(u8::MAX);
             }
             OpCode::Loop => {
                 self.chunk.add_code(op_code.into());
-                match self
-                    .back_patch_location
-                    .remove(&BackPatchKey(op_code, location.clone()))
-                {
-                    Some(loop_start) => {
-                        let jump = self.chunk.code_len() - loop_start + 2;
-                        let values = u16::try_from(jump)
-                            .map_err(|_| Error::TooLongJumpError {
-                                location: location.clone(),
-                            })?
-                            .to_be_bytes();
-                        self.chunk.add_code(values[0]);
-                        self.chunk.add_code(values[1]);
-                    }
-                    None => unreachable!(),
-                }
+                // The backpatch logic is used sa as to support patching multiple location
+                // (e.g. the continue statement).
+                self.add_backpatch_location(op_code, args.to_usage().unwrap(), location.clone());
+                self.chunk.add_code(u8::MAX);
+                self.chunk.add_code(u8::MAX);
             }
             _ => self.chunk.add_code(op_code.into()),
         }
@@ -204,33 +198,54 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn add_label(&mut self, op_code: OpCode, location: Location) {
-        self.back_patch_location
-            .insert(BackPatchKey(op_code, location), self.chunk.code_len());
+    fn add_label(&mut self, usage: Usage, location: Location) {
+        self.code_location_registry
+            .add_label(LabelKey::new(usage, location), self.chunk.code_len());
     }
 
-    fn back_patch_jump_location(
-        &mut self,
-        op_code: OpCode,
-        location: Location,
-    ) -> Result<(), Error> {
-        let key = BackPatchKey(op_code, location);
-        match self.back_patch_location.remove(&key) {
-            Some(offset) => match op_code {
+    fn add_backpatch_location(&mut self, op_code: OpCode, usage: Usage, location: Location) {
+        self.code_location_registry.add_backpatch_location(
+            BackPatchLocationKey::new(usage, location),
+            op_code,
+            self.chunk.code_len(),
+        );
+    }
+
+    fn back_patch_jump_location(&mut self, usage: Usage, location: Location) -> Result<(), Error> {
+        let key = BackPatchLocationKey::new(usage, location.clone());
+        for (op_code, backpatch_start) in
+            self.code_location_registry.remove_backpatch_location(&key)
+        {
+            match op_code {
                 OpCode::JumpIfFalse | OpCode::Jump => {
-                    let jump_offset = self.chunk.code_len() - offset - 2;
+                    let jump_offset = self.chunk.code_len() - backpatch_start - 2;
                     let values = u16::try_from(jump_offset)
                         .map_err(|_| Error::TooLongJumpError {
-                            location: key.1.clone(),
+                            location: location.clone(),
                         })?
                         .to_be_bytes();
-                    self.chunk.set_code(offset, values[0]);
-                    self.chunk.set_code(offset + 1, values[1]);
+                    self.chunk.set_code(backpatch_start, values[0]);
+                    self.chunk.set_code(backpatch_start + 1, values[1]);
+                }
+                OpCode::Loop => {
+                    let jump_target = self
+                        .code_location_registry
+                        .remove_label(&LabelKey::new(usage, location.clone()))
+                        .unwrap();
+                    let jump = backpatch_start - jump_target + 2;
+                    let values = u16::try_from(jump)
+                        .map_err(|_| Error::TooLongJumpError {
+                            location: location.clone(),
+                        })?
+                        .to_be_bytes();
+                    self.chunk.set_code(backpatch_start, values[0]);
+                    self.chunk.set_code(backpatch_start + 1, values[1]);
                 }
                 _ => unreachable!(),
-            },
-            None => unreachable!(),
+            }
         }
+        self.code_location_registry
+            .remove_label(&LabelKey::new(usage, location));
         Ok(())
     }
 

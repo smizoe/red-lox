@@ -15,6 +15,7 @@ pub fn disassemble_instruction(offset: usize, chunk: &Chunk) -> usize {
         .expect("Failed to write to stdout.")
 }
 
+#[cfg(test)]
 pub(crate) fn disassemble_chunk_for_testing(chunk: &Chunk, w: &mut dyn Write) {
     let mut offset = 0;
     while offset < chunk.code_len() {

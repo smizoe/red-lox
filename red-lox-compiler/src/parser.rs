@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::{
+    code_location_registry::Usage,
     interned_string::{intern_string, InternedString},
     op_code::OpCode,
     parsing_rule::*,
@@ -85,18 +86,19 @@ impl<'a, 'b> DerefMut for LocalScope<'a, 'b> {
 }
 
 struct BackPatchToken {
-    op_code: OpCode,
+    usage: Usage,
     location: Location,
 }
 
 impl BackPatchToken {
-    pub fn new(op_code: OpCode, location: Location) -> Self {
-        Self { op_code, location }
+    pub fn new(usage: Usage, location: Location) -> Self {
+        Self { usage, location }
     }
 
+    // Requests for filling the placeholders tied to the (usage, location) pair.
     pub fn patch(self, writes: &mut VecDeque<WriteAction>) {
         writes.push_back(WriteAction::BackPatchJumpLocation {
-            op_code: self.op_code,
+            usage: self.usage,
             location: self.location,
         });
     }
@@ -372,11 +374,20 @@ impl<'a> Parser<'a> {
             )
         })?;
 
-        let if_jump_token = self.emit_jump(OpCode::JumpIfFalse, if_token_location.clone());
+        let if_jump_token = self.emit_jump(
+            OpCode::JumpIfFalse,
+            Usage::EndOfStatement,
+            if_token_location.clone(),
+        );
         self.write_pop(if_token_location.clone());
         self.statement()?;
 
-        let skip_else_jump_token = self.emit_jump(OpCode::Jump, if_token_location.clone());
+        // the condition of the if stmt is active; we skip the else part if one exist.
+        let skip_else_jump_token = self.emit_jump(
+            OpCode::Jump,
+            Usage::EndOfStatement,
+            if_token_location.clone(),
+        );
         if_jump_token.patch(&mut self.pending_writes);
         self.write_pop(if_token_location.clone());
 
@@ -387,18 +398,21 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn emit_jump(&mut self, op_code: OpCode, location: Location) -> BackPatchToken {
+    // Emits a WriteAction::OpCodeWrite to pending_writes. The emitted value results in writing the op_code
+    // with two one-byte placeholders to be filled. They will be filled with the address corresponding to
+    // the (usage, location) pair when the patch method is called on the returned BackPatchToken.
+    fn emit_jump(&mut self, op_code: OpCode, usage: Usage, location: Location) -> BackPatchToken {
         self.pending_writes.push_back(WriteAction::OpCodeWrite {
             op_code,
-            args: Arguments::None,
+            args: Arguments::Usage(usage),
             location: location.clone(),
         });
-        BackPatchToken::new(op_code, location)
+        BackPatchToken::new(usage, location)
     }
 
-    fn add_label(&mut self, op_code: OpCode, location: Location) {
+    fn add_label(&mut self, usage: Usage, location: Location) {
         self.pending_writes
-            .push_back(WriteAction::AddLabel { op_code, location });
+            .push_back(WriteAction::AddLabel { usage, location });
     }
 
     fn write_pop(&mut self, location: Location) {
@@ -417,7 +431,7 @@ impl<'a> Parser<'a> {
                 t.location, t.token
             )
         })?;
-        self.add_label(OpCode::Loop, while_token_location.clone());
+        self.add_label(Usage::LoopCondition, while_token_location.clone());
         self.expression()?;
         self.consume(Token::RightParen, |t| {
             format!(
@@ -426,16 +440,22 @@ impl<'a> Parser<'a> {
             )
         })?;
 
-        let exit_jump = self.emit_jump(OpCode::JumpIfFalse, while_token_location.clone());
+        let exit_jump = self.emit_jump(
+            OpCode::JumpIfFalse,
+            Usage::EndOfStatement,
+            while_token_location.clone(),
+        );
         self.write_pop(while_token_location.clone());
         self.statement()?;
-        self.pending_writes.push_back(WriteAction::OpCodeWrite {
-            op_code: OpCode::Loop,
-            args: Arguments::None,
-            location: while_token_location.clone(),
-        });
+        let loop_jump = self.emit_jump(
+            OpCode::Loop,
+            Usage::LoopCondition,
+            while_token_location.clone(),
+        );
 
+        loop_jump.patch(&mut self.pending_writes);
         exit_jump.patch(&mut self.pending_writes);
+
         self.write_pop(while_token_location);
         Ok(())
     }
@@ -525,7 +545,11 @@ impl<'a> Parser<'a> {
 
     fn and(&mut self) -> Result<()> {
         let and_token_location = self.prev.location.clone();
-        let end_jump = self.emit_jump(OpCode::JumpIfFalse, and_token_location.clone());
+        let end_jump = self.emit_jump(
+            OpCode::JumpIfFalse,
+            Usage::EndOfExpression,
+            and_token_location.clone(),
+        );
         self.write_pop(and_token_location);
         self.parse_precedence(Precedence::And)?;
         end_jump.patch(&mut self.pending_writes);
@@ -534,8 +558,16 @@ impl<'a> Parser<'a> {
 
     fn or(&mut self) -> Result<()> {
         let or_token_location = self.prev.location.clone();
-        let else_jump = self.emit_jump(OpCode::JumpIfFalse, or_token_location.clone());
-        let end_jump = self.emit_jump(OpCode::Jump, or_token_location.clone());
+        let else_jump = self.emit_jump(
+            OpCode::JumpIfFalse,
+            Usage::NextLogicExpression,
+            or_token_location.clone(),
+        );
+        let end_jump = self.emit_jump(
+            OpCode::Jump,
+            Usage::EndOfExpression,
+            or_token_location.clone(),
+        );
 
         else_jump.patch(&mut self.pending_writes);
         self.write_pop(or_token_location);

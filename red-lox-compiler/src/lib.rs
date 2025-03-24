@@ -1,4 +1,5 @@
 mod chunk;
+mod code_location_registry;
 pub mod compiler;
 pub mod debug;
 mod interned_string;

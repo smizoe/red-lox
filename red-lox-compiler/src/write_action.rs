@@ -2,7 +2,7 @@ use red_lox_ast::scanner::Location;
 
 use crate::{interned_string::InternedString, op_code::OpCode};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Arguments {
     None,
     String(InternedString),
@@ -33,7 +33,7 @@ impl Arguments {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum WriteAction {
     // Writes the op_code into the chunk.
     OpCodeWrite {

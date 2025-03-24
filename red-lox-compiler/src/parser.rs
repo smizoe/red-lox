@@ -14,7 +14,6 @@ use red_lox_ast::scanner::{
     Location, Scanner, Token, TokenWithLocation, TokenizationError, IDENTIFIER_TOKEN,
 };
 
-
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("An error occurred while parsing the code: {}", .0)]
@@ -455,7 +454,6 @@ impl<'a> Parser<'a> {
     }
 
     fn expression_statement(&mut self) -> Result<()> {
-        let location = self.prev.location.clone();
         self.expression()?;
         self.consume(Token::Semicolon, |t| {
             format!(
@@ -463,7 +461,7 @@ impl<'a> Parser<'a> {
                 t.location, t.token
             )
         })?;
-        self.write_pop(location);
+        self.write_pop(self.prev.location.clone());
         Ok(())
     }
 

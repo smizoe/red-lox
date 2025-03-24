@@ -262,3 +262,73 @@ impl<'a> Compiler<'a> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use crate::debug::disassemble_chunk_for_testing;
+
+    use super::Compiler;
+
+    fn compile(text: &str) -> Result<String, String> {
+        let mut compiler = Compiler::new(text);
+        if let Err(e) = compiler.compile() {
+            return Err(format!(
+                "One or more errors occurred during compilation: {:?}",
+                e
+            ));
+        }
+        let result = compiler.finish();
+        let mut v = Vec::<u8>::new();
+        let mut cursor = Cursor::new(&mut v);
+        disassemble_chunk_for_testing(&result.chunk, &mut cursor);
+        Ok(String::from_utf8(v)
+            .map_err(|e| format!("Failed to convert the disassembled code to String {:?}", e))?)
+    }
+
+    #[test]
+    fn test_while_statement() -> Result<(), String> {
+        assert_eq!(
+            compile("while (true) { print false; }")?,
+            "0000    1 OP_TRUE\n\
+             0001    | OP_JUMP_IF_FALSE 0001 -> 10\n\
+             0004    | OP_POP\n\
+             0005    | OP_FALSE\n\
+             0006    | OP_PRINT\n\
+             0007    | OP_LOOP 0007 -> 0\n\
+             0010    | OP_POP\n\
+             0011    | OP_RETURN\n"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_logical_and() -> Result<(), String> {
+        assert_eq!(
+            compile("1 and 2;")?,
+            "0000    1 OP_CONSTANT 0000 '1'\n\
+             0002    | OP_JUMP_IF_FALSE 0002 -> 8\n\
+             0005    | OP_POP\n\
+             0006    | OP_CONSTANT 0001 '2'\n\
+             0008    | OP_POP\n\
+             0009    | OP_RETURN\n"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_logical_or() -> Result<(), String> {
+        assert_eq!(
+            compile("1 or 2;")?,
+            "0000    1 OP_CONSTANT 0000 '1'\n\
+             0002    | OP_JUMP_IF_FALSE 0002 -> 8\n\
+             0005    | OP_JUMP 0005 -> 11\n\
+             0008    | OP_POP\n\
+             0009    | OP_CONSTANT 0001 '2'\n\
+             0011    | OP_POP\n\
+             0012    | OP_RETURN\n"
+        );
+        Ok(())
+    }
+}

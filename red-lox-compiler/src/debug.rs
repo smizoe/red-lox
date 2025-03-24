@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use crate::{chunk::Chunk, op_code::OpCode};
 
 pub fn disassemble_chunk(chunk: &Chunk, name: &str) {
@@ -9,28 +11,46 @@ pub fn disassemble_chunk(chunk: &Chunk, name: &str) {
 }
 
 pub fn disassemble_instruction(offset: usize, chunk: &Chunk) -> usize {
-    print!("{:04} ", offset);
+    disassemble_instruction_internal(offset, chunk, &mut std::io::stdout())
+        .expect("Failed to write to stdout.")
+}
+
+pub(crate) fn disassemble_chunk_for_testing(chunk: &Chunk, w: &mut dyn Write) {
+    let mut offset = 0;
+    while offset < chunk.code_len() {
+        offset += disassemble_instruction_internal(offset, chunk, w)
+            .expect("Failed to write to the output");
+    }
+}
+
+fn disassemble_instruction_internal(
+    offset: usize,
+    chunk: &Chunk,
+    w: &mut dyn Write,
+) -> Result<usize, std::io::Error> {
+    write!(w, "{:04} ", offset)?;
     let line = chunk.line_of(offset);
     if offset > 0 && line == chunk.line_of(offset - 1) {
-        print!("   | ");
+        write!(w, "   | ")?;
     } else {
-        print!("{:4} ", line);
+        write!(w, "{:4} ", line)?;
     }
     match chunk.get_code(offset).try_into() {
         Ok(op) => {
             match op {
                 OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal => {
                     let constant_index = chunk.get_code(offset + 1);
-                    println!(
+                    writeln!(
+                        w,
                         "{:<16} {:04} '{}'",
                         op,
                         constant_index,
                         chunk.get_constant(usize::from(constant_index))
-                    );
+                    )?;
                 }
                 OpCode::GetLocal | OpCode::SetLocal => {
                     let stack_index = chunk.get_code(offset + 1);
-                    println!("{:<16} {:04}", op, stack_index);
+                    writeln!(w, "{:<16} {:04}", op, stack_index)?;
                 }
                 OpCode::Jump | OpCode::JumpIfFalse | OpCode::Loop => {
                     let jump = u16::from_be_bytes([
@@ -41,7 +61,7 @@ pub fn disassemble_instruction(offset: usize, chunk: &Chunk) -> usize {
                         OpCode::Loop => offset + op.len() - usize::from(jump),
                         _ => offset + op.len() + usize::from(jump),
                     };
-                    println!("{:<16} {:04} -> {}", op, offset, next_location);
+                    writeln!(w, "{:<16} {:04} -> {}", op, offset, next_location)?;
                 }
                 OpCode::Negate
                 | OpCode::Print
@@ -58,13 +78,13 @@ pub fn disassemble_instruction(offset: usize, chunk: &Chunk) -> usize {
                 | OpCode::Greater
                 | OpCode::Less
                 | OpCode::Not
-                | OpCode::Comma => println!("{}", op),
+                | OpCode::Comma => writeln!(w, "{}", op)?,
             }
-            op.len()
+            Ok(op.len())
         }
         Err(e) => {
-            println!("{:}", e);
-            1 // Move to the next code
+            writeln!(w, "{:}", e)?;
+            Ok(1) // Move to the next code
         }
     }
 }

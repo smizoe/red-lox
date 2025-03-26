@@ -58,14 +58,9 @@ impl<'a, 'b> Drop for LocalScope<'a, 'b> {
     fn drop(&mut self) {
         self.parser.scope_depth -= 1;
         let location = self.left_brace_location.clone();
-
-        let mut upper = self.locals.len();
-        for i in (0..self.locals.len()).rev() {
-            if self.locals[i].depth <= self.scope_depth() {
-                break;
-            }
+        let upper = self.upper_bound_of_depth(self.scope_depth());
+        for _ in 0..(self.locals.len() - upper) {
             self.write_pop(location.clone());
-            upper = i;
         }
         self.locals.truncate(upper);
     }
@@ -158,6 +153,17 @@ impl<'a> Parser<'a> {
 
     fn enter(&mut self) -> LocalScope<'a, '_> {
         LocalScope::new(self)
+    }
+
+    fn upper_bound_of_depth(&self, d: i32) -> usize {
+        let mut upper = self.locals.len();
+        for i in (0..self.locals.len()).rev() {
+            if self.locals[i].depth <= d {
+                break;
+            }
+            upper = i;
+        }
+        upper
     }
 
     fn synchronize(&mut self) -> Result<()> {

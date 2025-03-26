@@ -4,7 +4,7 @@ use red_lox_ast::scanner::{Location, Scanner};
 
 use crate::{
     chunk::Chunk,
-    code_location_registry::{BackPatchLocationKey, CodeLocationRegistry, LabelKey, Usage},
+    code_location_registry::{BackPatchLocationKey, CodeLocationRegistry, LabelKey, LabelType},
     interned_string::InternedString,
     op_code::OpCode,
     parser::Parser,
@@ -118,10 +118,10 @@ impl<'a> Compiler<'a> {
                 args,
                 location,
             } => self.write_op_code(*op_code, args, location),
-            WriteAction::BackPatchJumpLocation { usage, location } => {
+            WriteAction::BackPatchJumpLocation { label_type: usage, location } => {
                 self.back_patch_jump_location(*usage, location.clone())
             }
-            WriteAction::AddLabel { usage, location } => {
+            WriteAction::AddLabel { label_type: usage, location } => {
                 self.add_label(*usage, location.clone());
                 Ok(())
             }
@@ -180,7 +180,7 @@ impl<'a> Compiler<'a> {
             }
             OpCode::JumpIfFalse | OpCode::Jump => {
                 self.chunk.add_code(op_code.into());
-                self.add_backpatch_location(op_code, args.to_usage().unwrap(), location.clone());
+                self.add_backpatch_location(op_code, args.to_label_type().unwrap(), location.clone());
                 self.chunk.add_code(u8::MAX);
                 self.chunk.add_code(u8::MAX);
             }
@@ -188,7 +188,7 @@ impl<'a> Compiler<'a> {
                 self.chunk.add_code(op_code.into());
                 // The backpatch logic is used sa as to support patching multiple location
                 // (e.g. the continue statement).
-                self.add_backpatch_location(op_code, args.to_usage().unwrap(), location.clone());
+                self.add_backpatch_location(op_code, args.to_label_type().unwrap(), location.clone());
                 self.chunk.add_code(u8::MAX);
                 self.chunk.add_code(u8::MAX);
             }
@@ -198,12 +198,12 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn add_label(&mut self, usage: Usage, location: Location) {
+    fn add_label(&mut self, usage: LabelType, location: Location) {
         self.code_location_registry
             .add_label(LabelKey::new(usage, location), self.chunk.code_len());
     }
 
-    fn add_backpatch_location(&mut self, op_code: OpCode, usage: Usage, location: Location) {
+    fn add_backpatch_location(&mut self, op_code: OpCode, usage: LabelType, location: Location) {
         self.code_location_registry.add_backpatch_location(
             BackPatchLocationKey::new(usage, location),
             op_code,
@@ -211,7 +211,7 @@ impl<'a> Compiler<'a> {
         );
     }
 
-    fn back_patch_jump_location(&mut self, usage: Usage, location: Location) -> Result<(), Error> {
+    fn back_patch_jump_location(&mut self, usage: LabelType, location: Location) -> Result<(), Error> {
         let key = BackPatchLocationKey::new(usage, location.clone());
         for (op_code, backpatch_start) in
             self.code_location_registry.remove_backpatch_location(&key)

@@ -1,6 +1,6 @@
 use red_lox_ast::scanner::Location;
 
-use crate::{code_location_registry::Usage, interned_string::InternedString, op_code::OpCode};
+use crate::{code_location_registry::LabelType, interned_string::InternedString, op_code::OpCode};
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Arguments {
@@ -8,7 +8,7 @@ pub(crate) enum Arguments {
     String(InternedString),
     Number(f64),
     Offset(u8),
-    Usage(Usage),
+    LabelType(LabelType),
 }
 
 impl std::fmt::Display for Arguments {
@@ -33,9 +33,9 @@ impl Arguments {
         }
     }
 
-    pub fn to_usage(&self) -> Option<Usage> {
+    pub fn to_label_type(&self) -> Option<LabelType> {
         match self {
-            Arguments::Usage(u) => Some(*u),
+            Arguments::LabelType(l) => Some(*l),
             _ => None,
         }
     }
@@ -51,12 +51,12 @@ pub(crate) enum WriteAction {
     },
     // Applies the back-patching of the jump destination.
     BackPatchJumpLocation {
-        usage: Usage,
+        label_type: LabelType,
         location: Location,
     },
     // Adds a label to be used as a jump target.
     AddLabel {
-        usage: Usage,
+        label_type: LabelType,
         location: Location,
     },
 }

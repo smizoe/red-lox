@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    code_location_registry::Usage,
+    code_location_registry::LabelType,
     interned_string::{intern_string, InternedString},
     op_code::OpCode,
     parsing_rule::*,
@@ -86,19 +86,22 @@ impl<'a, 'b> DerefMut for LocalScope<'a, 'b> {
 }
 
 struct BackPatchToken {
-    usage: Usage,
+    label_type: LabelType,
     location: Location,
 }
 
 impl BackPatchToken {
-    pub fn new(usage: Usage, location: Location) -> Self {
-        Self { usage, location }
+    pub fn new(label_type: LabelType, location: Location) -> Self {
+        Self {
+            label_type,
+            location,
+        }
     }
 
-    // Requests for filling the placeholders tied to the (usage, location) pair.
+    // Requests for filling the placeholders tied to the (label_type, location) pair.
     pub fn patch(self, writes: &mut VecDeque<WriteAction>) {
         writes.push_back(WriteAction::BackPatchJumpLocation {
-            usage: self.usage,
+            label_type: self.label_type,
             location: self.location,
         });
     }
@@ -332,6 +335,8 @@ impl<'a> Parser<'a> {
     fn statement(&mut self) -> Result<()> {
         if self.next_token_is(&Token::Print)? {
             self.print_statement()
+        } else if self.next_token_is(&Token::For)? {
+            self.for_statement()
         } else if self.next_token_is(&Token::If)? {
             self.if_statement()
         } else if self.next_token_is(&Token::While)? {
@@ -361,6 +366,87 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    fn for_statement(&mut self) -> Result<()> {
+        let for_location = self.prev.location.clone();
+        let mut scope = self.enter();
+        scope.consume(Token::LeftParen, |t| {
+            format!(
+                "{} Expected '(' after 'for', found {:?}",
+                t.location, t.token
+            )
+        })?;
+
+        // Handles the initializer
+        if scope.next_token_is(&Token::Semicolon)? {
+            // no initializer
+        } else if scope.next_token_is(&Token::Var)? {
+            scope.var_declaration()?;
+        } else {
+            scope.expression_statement()?;
+        }
+
+        // Handles the condition clause
+        scope.add_label(LabelType::ConditionClause, for_location.clone());
+        let mut dest_label_after_loop = LabelType::ConditionClause;
+        if scope.next_token_is(&Token::Semicolon)? {
+            // Write OpCode::True to ensure we have some value on the stack.
+            // This is to support the break statement in the following case:
+            // for (;;) { break; }
+            scope.pending_writes.push_back(WriteAction::OpCodeWrite {
+                op_code: OpCode::True,
+                args: Arguments::None,
+                location: for_location.clone(),
+            });
+        } else {
+            scope.expression()?;
+            scope.consume(Token::Semicolon, |t| {
+                format!(
+                    "{} Expected ';' after loop condition, found {:?}",
+                    t.location, t.token
+                )
+            })?;
+        }
+        let exit_jump = scope.emit_jump(
+            OpCode::JumpIfFalse,
+            LabelType::EndOfStatement,
+            for_location.clone(),
+        );
+        scope.write_pop(for_location.clone());
+
+        if !scope.next_token_is(&Token::RightParen)? {
+            let body_jump = scope.emit_jump(
+                OpCode::Jump,
+                LabelType::StartOfStatement,
+                for_location.clone(),
+            );
+            scope.add_label(LabelType::IncrementClause, for_location.clone());
+            scope.expression()?;
+            scope.write_pop(for_location.clone());
+            scope.consume(Token::RightParen, |t| {
+                format!(
+                    "{} Expected ')' after for clauses, found {:?}",
+                    t.location, t.token
+                )
+            })?;
+            scope
+                .emit_jump(
+                    OpCode::Loop,
+                    LabelType::ConditionClause,
+                    for_location.clone(),
+                )
+                .patch(&mut scope.pending_writes);
+            dest_label_after_loop = LabelType::IncrementClause;
+            body_jump.patch(&mut scope.pending_writes);
+        }
+        scope.statement()?;
+        scope
+            .emit_jump(OpCode::Loop, dest_label_after_loop, for_location.clone())
+            .patch(&mut scope.pending_writes);
+        exit_jump.patch(&mut scope.pending_writes);
+
+        Ok(())
+    }
+
     fn if_statement(&mut self) -> Result<()> {
         let if_token_location = self.prev.location.clone();
         self.consume(Token::LeftParen, |t| {
@@ -376,7 +462,7 @@ impl<'a> Parser<'a> {
 
         let if_jump_token = self.emit_jump(
             OpCode::JumpIfFalse,
-            Usage::EndOfStatement,
+            LabelType::EndOfStatement,
             if_token_location.clone(),
         );
         self.write_pop(if_token_location.clone());
@@ -385,7 +471,7 @@ impl<'a> Parser<'a> {
         // the condition of the if stmt is active; we skip the else part if one exist.
         let skip_else_jump_token = self.emit_jump(
             OpCode::Jump,
-            Usage::EndOfStatement,
+            LabelType::EndOfStatement,
             if_token_location.clone(),
         );
         if_jump_token.patch(&mut self.pending_writes);
@@ -400,19 +486,26 @@ impl<'a> Parser<'a> {
 
     // Emits a WriteAction::OpCodeWrite to pending_writes. The emitted value results in writing the op_code
     // with two one-byte placeholders to be filled. They will be filled with the address corresponding to
-    // the (usage, location) pair when the patch method is called on the returned BackPatchToken.
-    fn emit_jump(&mut self, op_code: OpCode, usage: Usage, location: Location) -> BackPatchToken {
+    // the (label_type, location) pair when the patch method is called on the returned BackPatchToken.
+    fn emit_jump(
+        &mut self,
+        op_code: OpCode,
+        label_type: LabelType,
+        location: Location,
+    ) -> BackPatchToken {
         self.pending_writes.push_back(WriteAction::OpCodeWrite {
             op_code,
-            args: Arguments::Usage(usage),
+            args: Arguments::LabelType(label_type),
             location: location.clone(),
         });
-        BackPatchToken::new(usage, location)
+        BackPatchToken::new(label_type, location)
     }
 
-    fn add_label(&mut self, usage: Usage, location: Location) {
-        self.pending_writes
-            .push_back(WriteAction::AddLabel { usage, location });
+    fn add_label(&mut self, label_type: LabelType, location: Location) {
+        self.pending_writes.push_back(WriteAction::AddLabel {
+            label_type,
+            location,
+        });
     }
 
     fn write_pop(&mut self, location: Location) {
@@ -431,7 +524,7 @@ impl<'a> Parser<'a> {
                 t.location, t.token
             )
         })?;
-        self.add_label(Usage::LoopCondition, while_token_location.clone());
+        self.add_label(LabelType::ConditionClause, while_token_location.clone());
         self.expression()?;
         self.consume(Token::RightParen, |t| {
             format!(
@@ -442,14 +535,14 @@ impl<'a> Parser<'a> {
 
         let exit_jump = self.emit_jump(
             OpCode::JumpIfFalse,
-            Usage::EndOfStatement,
+            LabelType::EndOfStatement,
             while_token_location.clone(),
         );
         self.write_pop(while_token_location.clone());
         self.statement()?;
         let loop_jump = self.emit_jump(
             OpCode::Loop,
-            Usage::LoopCondition,
+            LabelType::ConditionClause,
             while_token_location.clone(),
         );
 
@@ -547,7 +640,7 @@ impl<'a> Parser<'a> {
         let and_token_location = self.prev.location.clone();
         let end_jump = self.emit_jump(
             OpCode::JumpIfFalse,
-            Usage::EndOfExpression,
+            LabelType::EndOfExpression,
             and_token_location.clone(),
         );
         self.write_pop(and_token_location);
@@ -560,12 +653,12 @@ impl<'a> Parser<'a> {
         let or_token_location = self.prev.location.clone();
         let else_jump = self.emit_jump(
             OpCode::JumpIfFalse,
-            Usage::NextLogicExpression,
+            LabelType::NextLogicExpression,
             or_token_location.clone(),
         );
         let end_jump = self.emit_jump(
             OpCode::Jump,
-            Usage::EndOfExpression,
+            LabelType::EndOfExpression,
             or_token_location.clone(),
         );
 

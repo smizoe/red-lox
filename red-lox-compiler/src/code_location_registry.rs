@@ -59,35 +59,37 @@ impl CodeLocationRegistry {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum Usage {
-    LoopCondition,
+pub(crate) enum LabelType {
+    ConditionClause,
+    IncrementClause,
     NextLogicExpression,
+    StartOfStatement,
     EndOfStatement,
     EndOfExpression,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct LabelKey {
-    usage: Usage,
+    usage: LabelType,
     // The location of the token that is related to the usage
     // e.g., 'while' and 'for' for LoopCondition, 'else' for EndOfStatement
     location: Location,
 }
 
 impl LabelKey {
-    pub(crate) fn new(usage: Usage, location: Location) -> Self {
+    pub(crate) fn new(usage: LabelType, location: Location) -> Self {
         Self { usage, location }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct BackPatchLocationKey {
-    usage: Usage,
+    usage: LabelType,
     location: Location,
 }
 
 impl BackPatchLocationKey {
-    pub(crate) fn new(usage: Usage, location: Location) -> Self {
+    pub(crate) fn new(usage: LabelType, location: Location) -> Self {
         Self { usage, location }
     }
 }

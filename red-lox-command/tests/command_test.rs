@@ -52,7 +52,11 @@ impl ExpectedOutput {
 }
 
 #[rstest]
-fn test_lox_interpreter(#[files("../tests/lox/**/*.lox")] path: PathBuf) {
+fn test_lox_interpreter(
+    #[files("../tests/lox/**/*.lox")]
+    #[exclude("compiler_only")]
+    path: PathBuf,
+) {
     use red_lox_command::interpreter::run_interpreter;
 
     let mut out = Cursor::new(Vec::new());
@@ -84,7 +88,11 @@ fn test_lox_interpreter(#[files("../tests/lox/**/*.lox")] path: PathBuf) {
 }
 
 #[rstest]
-fn test_lox_compiler(#[files("../tests/lox/**/*.lox")] #[exclude("(class|conditional|errors|functions|logical_op|ternary_op)")]path: PathBuf) {
+fn test_lox_compiler(
+    #[files("../tests/lox/**/*.lox")]
+    #[exclude("(class|conditional|errors|functions|logical_op|ternary_op)")]
+    path: PathBuf,
+) {
     use red_lox_command::compiler::run_compiler;
 
     let mut out = Cursor::new(Vec::new());

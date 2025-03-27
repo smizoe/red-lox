@@ -29,6 +29,8 @@ pub enum Error {
     DuplicateVariableDeclarationError { location: Location, name: String },
     #[error("{location} Can't read local variable '{name}' in its own initializer.")]
     UninititalizedVariableAccessError { location: Location, name: String },
+    #[error("{location} Can't use a break statement outside a loop or a switch statement.")]
+    MisplacedBreakStatementError { location: Location },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -38,7 +40,7 @@ struct Local {
     depth: i32,
 }
 
-pub(crate) struct LocalScope<'a, 'b> {
+struct LocalScope<'a, 'b> {
     parser: &'b mut Parser<'a>,
     left_brace_location: Location,
 }
@@ -80,6 +82,41 @@ impl<'a, 'b> DerefMut for LocalScope<'a, 'b> {
     }
 }
 
+struct BreakableStatementGuard<'a, 'b> {
+    parser: &'b mut Parser<'a>,
+}
+
+impl<'a, 'b> BreakableStatementGuard<'a, 'b> {
+    pub fn new(parser: &'b mut Parser<'a>, stmt_type: StatementType, location: Location) -> Self {
+        parser.breakable_stmts.push(BreakableStatement {
+            statement_type: stmt_type,
+            location,
+            depth: parser.scope_depth(),
+        });
+        Self { parser }
+    }
+}
+
+impl<'a, 'b> Drop for BreakableStatementGuard<'a, 'b> {
+    fn drop(&mut self) {
+        self.parser.breakable_stmts.pop();
+    }
+}
+
+impl<'a, 'b> Deref for BreakableStatementGuard<'a, 'b> {
+    type Target = Parser<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.parser
+    }
+}
+
+impl<'a, 'b> DerefMut for BreakableStatementGuard<'a, 'b> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.parser
+    }
+}
+
 struct BackPatchToken {
     label_type: LabelType,
     location: Location,
@@ -102,6 +139,23 @@ impl BackPatchToken {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+enum StatementType {
+    While,
+    For,
+    Switch,
+}
+
+#[derive(Debug, Clone)]
+struct BreakableStatement {
+    statement_type: StatementType,
+    /// Location used to tag the jump location
+    location: Location,
+    /// The depth of the scope at the statement. The local variables should be popped
+    /// if their depth is greater than this value.
+    depth: i32,
+}
+
 pub(crate) struct Parser<'a> {
     scanner: Scanner<'a>,
     pending_writes: VecDeque<WriteAction>,
@@ -110,6 +164,7 @@ pub(crate) struct Parser<'a> {
     pub(crate) prev: TokenWithLocation,
     pub(crate) strings: HashMap<InternedString, Option<u8>>,
     locals: Vec<Local>,
+    breakable_stmts: Vec<BreakableStatement>,
     scope_depth: i32,
 }
 
@@ -129,6 +184,7 @@ impl<'a> Parser<'a> {
             },
             strings: HashMap::new(),
             locals: Vec::new(),
+            breakable_stmts: Vec::new(),
             scope_depth: 0,
         };
         parser.advance().expect("No token available in Scanner.");
@@ -350,6 +406,8 @@ impl<'a> Parser<'a> {
         } else if self.next_token_is(&Token::LeftBrace)? {
             let mut scope = self.enter();
             scope.block()
+        } else if self.next_token_is(&Token::Break)? {
+            self.break_statement()
         } else {
             self.expression_statement()
         }
@@ -375,7 +433,9 @@ impl<'a> Parser<'a> {
     fn for_statement(&mut self) -> Result<()> {
         let for_location = self.prev.location.clone();
         let mut scope = self.enter();
-        scope.consume(Token::LeftParen, |t| {
+        let mut guard =
+            BreakableStatementGuard::new(&mut scope, StatementType::For, for_location.clone());
+        guard.consume(Token::LeftParen, |t| {
             format!(
                 "{} Expected '(' after 'for', found {:?}",
                 t.location, t.token
@@ -383,72 +443,73 @@ impl<'a> Parser<'a> {
         })?;
 
         // Handles the initializer
-        if scope.next_token_is(&Token::Semicolon)? {
+        if guard.next_token_is(&Token::Semicolon)? {
             // no initializer
-        } else if scope.next_token_is(&Token::Var)? {
-            scope.var_declaration()?;
+        } else if guard.next_token_is(&Token::Var)? {
+            guard.var_declaration()?;
         } else {
-            scope.expression_statement()?;
+            guard.expression_statement()?;
         }
 
         // Handles the condition clause
-        scope.add_label(LabelType::ConditionClause, for_location.clone());
+        guard.add_label(LabelType::ConditionClause, for_location.clone());
         let mut dest_label_after_loop = LabelType::ConditionClause;
-        if scope.next_token_is(&Token::Semicolon)? {
+        if guard.next_token_is(&Token::Semicolon)? {
             // Write OpCode::True to ensure we have some value on the stack.
             // This is to support the break statement in the following case:
             // for (;;) { break; }
-            scope.pending_writes.push_back(WriteAction::OpCodeWrite {
+            guard.pending_writes.push_back(WriteAction::OpCodeWrite {
                 op_code: OpCode::True,
                 args: Arguments::None,
                 location: for_location.clone(),
             });
         } else {
-            scope.expression()?;
-            scope.consume(Token::Semicolon, |t| {
+            guard.expression()?;
+            guard.consume(Token::Semicolon, |t| {
                 format!(
                     "{} Expected ';' after loop condition, found {:?}",
                     t.location, t.token
                 )
             })?;
         }
-        let exit_jump = scope.emit_jump(
+        let exit_jump = guard.emit_jump(
             OpCode::JumpIfFalse,
             LabelType::EndOfStatement,
             for_location.clone(),
         );
-        scope.write_pop(for_location.clone());
+        guard.write_pop(for_location.clone());
 
-        if !scope.next_token_is(&Token::RightParen)? {
-            let body_jump = scope.emit_jump(
+        if !guard.next_token_is(&Token::RightParen)? {
+            let body_jump = guard.emit_jump(
                 OpCode::Jump,
                 LabelType::StartOfStatement,
                 for_location.clone(),
             );
-            scope.add_label(LabelType::IncrementClause, for_location.clone());
-            scope.expression()?;
-            scope.write_pop(for_location.clone());
-            scope.consume(Token::RightParen, |t| {
+            guard.add_label(LabelType::IncrementClause, for_location.clone());
+            guard.expression()?;
+            guard.write_pop(for_location.clone());
+            guard.consume(Token::RightParen, |t| {
                 format!(
                     "{} Expected ')' after for clauses, found {:?}",
                     t.location, t.token
                 )
             })?;
-            scope
+            guard
                 .emit_jump(
                     OpCode::Loop,
                     LabelType::ConditionClause,
                     for_location.clone(),
                 )
-                .patch(&mut scope.pending_writes);
+                .patch(&mut guard.pending_writes);
             dest_label_after_loop = LabelType::IncrementClause;
-            body_jump.patch(&mut scope.pending_writes);
+            body_jump.patch(&mut guard.pending_writes);
         }
-        scope.statement()?;
-        scope
+        guard.statement()?;
+        guard
             .emit_jump(OpCode::Loop, dest_label_after_loop, for_location.clone())
-            .patch(&mut scope.pending_writes);
-        exit_jump.patch(&mut scope.pending_writes);
+            .patch(&mut guard.pending_writes);
+        exit_jump.patch(&mut guard.pending_writes);
+        guard.write_pop(for_location);
 
         Ok(())
     }
@@ -524,39 +585,75 @@ impl<'a> Parser<'a> {
 
     fn while_statement(&mut self) -> Result<()> {
         let while_token_location = self.prev.location.clone();
-        self.consume(Token::LeftParen, |t| {
+        let mut guard =
+            BreakableStatementGuard::new(self, StatementType::While, while_token_location.clone());
+        guard.consume(Token::LeftParen, |t| {
             format!(
                 "{} Expected '(' after 'while', found {:?}",
                 t.location, t.token
             )
         })?;
-        self.add_label(LabelType::ConditionClause, while_token_location.clone());
-        self.expression()?;
-        self.consume(Token::RightParen, |t| {
+        guard.add_label(LabelType::ConditionClause, while_token_location.clone());
+        guard.expression()?;
+        guard.consume(Token::RightParen, |t| {
             format!(
                 "{} Expected ')' after a condition, found {:?}",
                 t.location, t.token
             )
         })?;
 
-        let exit_jump = self.emit_jump(
+        let exit_jump = guard.emit_jump(
             OpCode::JumpIfFalse,
             LabelType::EndOfStatement,
             while_token_location.clone(),
         );
-        self.write_pop(while_token_location.clone());
-        self.statement()?;
-        let loop_jump = self.emit_jump(
+        guard.write_pop(while_token_location.clone());
+        guard.statement()?;
+        let loop_jump = guard.emit_jump(
             OpCode::Loop,
             LabelType::ConditionClause,
             while_token_location.clone(),
         );
 
-        loop_jump.patch(&mut self.pending_writes);
-        exit_jump.patch(&mut self.pending_writes);
-
-        self.write_pop(while_token_location);
+        loop_jump.patch(&mut guard.pending_writes);
+        exit_jump.patch(&mut guard.pending_writes);
+        guard.write_pop(while_token_location);
         Ok(())
+    }
+
+    fn break_statement(&mut self) -> Result<()> {
+        match self.breakable_stmts.last().cloned() {
+            None => Err(Error::MisplacedBreakStatementError {
+                location: self.prev.location.clone(),
+            }),
+            Some(stmt) => {
+                let to_pop = self.locals.len() - self.upper_bound_of_depth(stmt.depth);
+                for _ in 0..to_pop {
+                    self.write_pop(self.prev.location.clone());
+                }
+                // The current implementation jump to the end of the statement tied to the loop.
+                // This means that the next operation is Pop, which is expected to drop the expression
+                // generated in the condition clause.
+                // The following push of Nil is to offset the Pop operation.
+                self.pending_writes.push_back(WriteAction::OpCodeWrite {
+                    op_code: OpCode::Nil,
+                    args: Arguments::None,
+                    location: self.prev.location.clone(),
+                });
+                self.emit_jump(
+                    OpCode::Jump,
+                    LabelType::EndOfStatement,
+                    stmt.location.clone(),
+                );
+                self.consume(Token::Semicolon, |t| {
+                    format!(
+                        "{} Expected ';' after break, found {:?}",
+                        t.location, t.token
+                    )
+                })?;
+                Ok(())
+            }
+        }
     }
 
     fn block(&mut self) -> Result<()> {

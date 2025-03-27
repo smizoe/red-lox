@@ -31,6 +31,8 @@ pub enum Error {
     UninititalizedVariableAccessError { location: Location, name: String },
     #[error("{location} Can't use a break statement outside a loop or a switch statement.")]
     MisplacedBreakStatementError { location: Location },
+    #[error("{location} Can't use a continue statement outside a loop.")]
+    MisplacedContinueStatementError { location: Location },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -408,6 +410,8 @@ impl<'a> Parser<'a> {
             scope.block()
         } else if self.next_token_is(&Token::Break)? {
             self.break_statement()
+        } else if self.next_token_is(&Token::Continue)? {
+            self.continue_statement()
         } else {
             self.expression_statement()
         }
@@ -453,7 +457,6 @@ impl<'a> Parser<'a> {
 
         // Handles the condition clause
         guard.add_label(LabelType::ConditionClause, for_location.clone());
-        let mut dest_label_after_loop = LabelType::ConditionClause;
         if guard.next_token_is(&Token::Semicolon)? {
             // Write OpCode::True to ensure we have some value on the stack.
             // This is to support the break statement in the following case:
@@ -478,14 +481,13 @@ impl<'a> Parser<'a> {
             for_location.clone(),
         );
         guard.write_pop(for_location.clone());
-
+        let body_jump = guard.emit_jump(
+            OpCode::Jump,
+            LabelType::StartOfStatement,
+            for_location.clone(),
+        );
+        guard.add_label(LabelType::IncrementClause, for_location.clone());
         if !guard.next_token_is(&Token::RightParen)? {
-            let body_jump = guard.emit_jump(
-                OpCode::Jump,
-                LabelType::StartOfStatement,
-                for_location.clone(),
-            );
-            guard.add_label(LabelType::IncrementClause, for_location.clone());
             guard.expression()?;
             guard.write_pop(for_location.clone());
             guard.consume(Token::RightParen, |t| {
@@ -494,19 +496,22 @@ impl<'a> Parser<'a> {
                     t.location, t.token
                 )
             })?;
-            guard
-                .emit_jump(
-                    OpCode::Loop,
-                    LabelType::ConditionClause,
-                    for_location.clone(),
-                )
-                .patch(&mut guard.pending_writes);
-            dest_label_after_loop = LabelType::IncrementClause;
-            body_jump.patch(&mut guard.pending_writes);
         }
+        guard
+            .emit_jump(
+                OpCode::Loop,
+                LabelType::ConditionClause,
+                for_location.clone(),
+            )
+            .patch(&mut guard.pending_writes);
+        body_jump.patch(&mut guard.pending_writes);
         guard.statement()?;
         guard
-            .emit_jump(OpCode::Loop, dest_label_after_loop, for_location.clone())
+            .emit_jump(
+                OpCode::Loop,
+                LabelType::IncrementClause,
+                for_location.clone(),
+            )
             .patch(&mut guard.pending_writes);
         exit_jump.patch(&mut guard.pending_writes);
         guard.write_pop(for_location);
@@ -648,6 +653,33 @@ impl<'a> Parser<'a> {
                 self.consume(Token::Semicolon, |t| {
                     format!(
                         "{} Expected ';' after break, found {:?}",
+                        t.location, t.token
+                    )
+                })?;
+                Ok(())
+            }
+        }
+    }
+
+    fn continue_statement(&mut self) -> Result<()> {
+        match self.breakable_stmts.last().cloned() {
+            None => Err(Error::MisplacedContinueStatementError {
+                location: self.prev.location.clone(),
+            }),
+            Some(stmt) => {
+                let to_pop = self.locals.len() - self.upper_bound_of_depth(stmt.depth);
+                for _ in 0..to_pop {
+                    self.write_pop(self.prev.location.clone());
+                }
+                let label_type = if stmt.statement_type == StatementType::While {
+                    LabelType::ConditionClause
+                } else {
+                    LabelType::IncrementClause
+                };
+                self.emit_jump(OpCode::Loop, label_type, stmt.location.clone());
+                self.consume(Token::Semicolon, |t| {
+                    format!(
+                        "{} Expected ';' after continue, found {:?}",
                         t.location, t.token
                     )
                 })?;

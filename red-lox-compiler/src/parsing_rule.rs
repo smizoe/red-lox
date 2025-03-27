@@ -168,6 +168,7 @@ pub(crate) fn get_rule(token: &Token) -> Rule {
             infix: And,
         },
         Token::Break => Rule::default(),
+        Token::Continue => Rule::default(),
         Token::Class => Rule::default(),
         Token::Else => Rule::default(),
         Token::False => Rule {

@@ -118,10 +118,14 @@ impl<'a> Compiler<'a> {
                 args,
                 location,
             } => self.write_op_code(*op_code, args, location),
-            WriteAction::BackPatchJumpLocation { label_type: usage, location } => {
-                self.back_patch_jump_location(*usage, location.clone())
-            }
-            WriteAction::AddLabel { label_type: usage, location } => {
+            WriteAction::BackPatchJumpLocation {
+                label_type: usage,
+                location,
+            } => self.back_patch_jump_location(*usage, location.clone()),
+            WriteAction::AddLabel {
+                label_type: usage,
+                location,
+            } => {
                 self.add_label(*usage, location.clone());
                 Ok(())
             }
@@ -180,7 +184,11 @@ impl<'a> Compiler<'a> {
             }
             OpCode::JumpIfFalse | OpCode::Jump => {
                 self.chunk.add_code(op_code.into());
-                self.add_backpatch_location(op_code, args.to_label_type().unwrap(), location.clone());
+                self.add_backpatch_location(
+                    op_code,
+                    args.to_label_type().unwrap(),
+                    location.clone(),
+                );
                 self.chunk.add_code(u8::MAX);
                 self.chunk.add_code(u8::MAX);
             }
@@ -188,7 +196,11 @@ impl<'a> Compiler<'a> {
                 self.chunk.add_code(op_code.into());
                 // The backpatch logic is used sa as to support patching multiple location
                 // (e.g. the continue statement).
-                self.add_backpatch_location(op_code, args.to_label_type().unwrap(), location.clone());
+                self.add_backpatch_location(
+                    op_code,
+                    args.to_label_type().unwrap(),
+                    location.clone(),
+                );
                 self.chunk.add_code(u8::MAX);
                 self.chunk.add_code(u8::MAX);
             }
@@ -211,35 +223,45 @@ impl<'a> Compiler<'a> {
         );
     }
 
-    fn back_patch_jump_location(&mut self, usage: LabelType, location: Location) -> Result<(), Error> {
+    fn back_patch_jump_location(
+        &mut self,
+        usage: LabelType,
+        location: Location,
+    ) -> Result<(), Error> {
         let key = BackPatchLocationKey::new(usage, location.clone());
-        for (op_code, backpatch_start) in
-            self.code_location_registry.remove_backpatch_location(&key)
+        for (op_code, backpatch_starts) in self
+            .code_location_registry
+            .remove_backpatch_location(&key)
+            .into_iter()
         {
             match op_code {
                 OpCode::JumpIfFalse | OpCode::Jump => {
-                    let jump_offset = self.chunk.code_len() - backpatch_start - 2;
-                    let values = u16::try_from(jump_offset)
-                        .map_err(|_| Error::TooLongJumpError {
-                            location: location.clone(),
-                        })?
-                        .to_be_bytes();
-                    self.chunk.set_code(backpatch_start, values[0]);
-                    self.chunk.set_code(backpatch_start + 1, values[1]);
+                    for backpatch_start in backpatch_starts {
+                        let jump_offset = self.chunk.code_len() - backpatch_start - 2;
+                        let values = u16::try_from(jump_offset)
+                            .map_err(|_| Error::TooLongJumpError {
+                                location: location.clone(),
+                            })?
+                            .to_be_bytes();
+                        self.chunk.set_code(backpatch_start, values[0]);
+                        self.chunk.set_code(backpatch_start + 1, values[1]);
+                    }
                 }
                 OpCode::Loop => {
                     let jump_target = self
                         .code_location_registry
                         .remove_label(&LabelKey::new(usage, location.clone()))
                         .unwrap();
-                    let jump = backpatch_start - jump_target + 2;
-                    let values = u16::try_from(jump)
-                        .map_err(|_| Error::TooLongJumpError {
-                            location: location.clone(),
-                        })?
-                        .to_be_bytes();
-                    self.chunk.set_code(backpatch_start, values[0]);
-                    self.chunk.set_code(backpatch_start + 1, values[1]);
+                    for backpatch_start in backpatch_starts {
+                        let jump = backpatch_start - jump_target + 2;
+                        let values = u16::try_from(jump)
+                            .map_err(|_| Error::TooLongJumpError {
+                                location: location.clone(),
+                            })?
+                            .to_be_bytes();
+                        self.chunk.set_code(backpatch_start, values[0]);
+                        self.chunk.set_code(backpatch_start + 1, values[1]);
+                    }
                 }
                 _ => unreachable!(),
             }

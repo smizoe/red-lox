@@ -17,9 +17,10 @@ use crate::op_code::OpCode;
 ///       has been updated), get the locations to patch from `backpatch_locations` and patch them.
 /// The value of `backpatch_locations` is a vector so as to support patching multiple locations to jump from
 /// (e.g., the break statement and the continue statement).
+#[derive(Debug)]
 pub(crate) struct CodeLocationRegistry {
     labels: HashMap<LabelKey, usize>,
-    backpatch_locations: HashMap<BackPatchLocationKey, Vec<(OpCode, usize)>>,
+    backpatch_locations: HashMap<BackPatchLocationKey, HashMap<OpCode, Vec<usize>>>,
 }
 
 impl CodeLocationRegistry {
@@ -47,13 +48,15 @@ impl CodeLocationRegistry {
         self.backpatch_locations
             .entry(key)
             .or_default()
-            .push((op_code, code_location))
+            .entry(op_code)
+            .or_default()
+            .push(code_location)
     }
 
     pub(crate) fn remove_backpatch_location(
         &mut self,
         key: &BackPatchLocationKey,
-    ) -> Vec<(OpCode, usize)> {
+    ) -> HashMap<OpCode, Vec<usize>> {
         self.backpatch_locations.remove(key).unwrap_or_default()
     }
 }

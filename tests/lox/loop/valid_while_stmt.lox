@@ -22,3 +22,16 @@ while (a < 5) {
     a = a + 1;
 }
 print a; // out: 5
+a = 0;
+{
+    var b = 0;
+    while (a < 100) {
+        a = a + 2;
+        b = b + 1;
+        if (b == 6) {
+            break;
+        }
+    }
+    print b; // out: 6
+}
+print a; // out: 12

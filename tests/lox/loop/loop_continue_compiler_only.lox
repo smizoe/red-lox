@@ -1,0 +1,13 @@
+for (var a = 0; a < 5; a = a + 1) {
+    continue;
+    print 1; // no output
+}
+var a = 0;
+while (true) {
+    if (a <= 3) {
+        a = a + 1;
+        continue;
+    }
+    print a; // out: 4
+    break;
+}

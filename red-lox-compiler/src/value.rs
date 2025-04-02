@@ -1,8 +1,8 @@
-use std::{
-    fmt::{Display, Formatter},
-};
+use std::fmt::{Display, Formatter};
+use std::rc::Rc;
 
 use crate::interned_string::InternedString;
+use crate::lox_function::LoxFunction;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Value {
@@ -10,6 +10,7 @@ pub(crate) enum Value {
     Bool(bool),
     Number(f64),
     String(InternedString),
+    Function(Rc<LoxFunction>),
 }
 
 impl Display for Value {
@@ -19,6 +20,13 @@ impl Display for Value {
             Value::Bool(b) => write!(f, "{}", b),
             Value::Number(v) => write!(f, "{}", v),
             Value::String(s) => write!(f, "{}", s),
+            Value::Function(fun) => {
+                if fun.name.as_ref().is_empty() {
+                    write!(f, "<script>")
+                } else {
+                    write!(f, "<fn {}>", fun.name)
+                }
+            }
         }
     }
 }
@@ -72,6 +80,7 @@ impl Value {
             Bool(_) => "boolean",
             Number(_) => "number",
             String(_) => "string",
+            Function(_) => "function",
         }
     }
 }

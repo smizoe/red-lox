@@ -59,6 +59,14 @@ pub(crate) enum WriteAction {
         label_type: LabelType,
         location: Location,
     },
+    FunctionDeclaration {
+        name: InternedString,
+        arity: usize,
+        location: Location,
+    },
+    FunctionDeclarationEnd {
+        location: Location,
+    },
 }
 
 impl WriteAction {
@@ -67,6 +75,8 @@ impl WriteAction {
             WriteAction::OpCodeWrite { location, .. } => location,
             WriteAction::BackPatchJumpLocation { location, .. } => location,
             WriteAction::AddLabel { location, .. } => location,
+            WriteAction::FunctionDeclaration { location, .. } => location,
+            WriteAction::FunctionDeclarationEnd { location } => location,
         }
     }
 }

@@ -49,7 +49,7 @@ struct LocalScope<'a, 'b> {
 
 impl<'a, 'b> LocalScope<'a, 'b> {
     pub fn new(parser: &'b mut Parser<'a>) -> Self {
-        parser.scope_depth += 1;
+        parser.env.scope_depth += 1;
         let location = parser.prev.location.clone();
         Self {
             parser,
@@ -60,13 +60,13 @@ impl<'a, 'b> LocalScope<'a, 'b> {
 
 impl<'a, 'b> Drop for LocalScope<'a, 'b> {
     fn drop(&mut self) {
-        self.parser.scope_depth -= 1;
+        self.parser.env.scope_depth -= 1;
         let location = self.left_brace_location.clone();
         let upper = self.upper_bound_of_depth(self.scope_depth());
-        for _ in 0..(self.locals.len() - upper) {
+        for _ in 0..(self.locals().len() - upper) {
             self.write_pop(location.clone());
         }
-        self.locals.truncate(upper);
+        self.locals_mut().truncate(upper);
     }
 }
 
@@ -84,13 +84,61 @@ impl<'a, 'b> DerefMut for LocalScope<'a, 'b> {
     }
 }
 
+struct FunctionDeclarationScope<'a, 'b> {
+    parser: &'b mut Parser<'a>,
+    prev_env: FunctionEnv,
+}
+
+impl<'a, 'b> FunctionDeclarationScope<'a, 'b> {
+    pub fn new(parser: &'b mut Parser<'a>, fun_name: InternedString, arity: usize) -> Self {
+        parser
+            .pending_writes
+            .push_back(WriteAction::FunctionDeclaration {
+                name: fun_name,
+                arity,
+                location: parser.prev.location.clone(),
+            });
+        let mut env = FunctionEnv::new(FunctionType::Function);
+        std::mem::swap(&mut parser.env, &mut env);
+
+        Self {
+            parser,
+            prev_env: env,
+        }
+    }
+}
+
+impl<'a, 'b> Drop for FunctionDeclarationScope<'a, 'b> {
+    fn drop(&mut self) {
+        let location = self.prev.location.clone();
+        let mut prev_env = std::mem::take(&mut self.prev_env);
+        std::mem::swap(&mut self.env, &mut prev_env);
+        self.pending_writes
+            .push_back(WriteAction::FunctionDeclarationEnd { location });
+    }
+}
+
+impl<'a, 'b> Deref for FunctionDeclarationScope<'a, 'b> {
+    type Target = Parser<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.parser
+    }
+}
+
+impl<'a, 'b> DerefMut for FunctionDeclarationScope<'a, 'b> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.parser
+    }
+}
+
 struct BreakableStatementGuard<'a, 'b> {
     parser: &'b mut Parser<'a>,
 }
 
 impl<'a, 'b> BreakableStatementGuard<'a, 'b> {
     pub fn new(parser: &'b mut Parser<'a>, stmt_type: StatementType, location: Location) -> Self {
-        parser.breakable_stmts.push(BreakableStatement {
+        parser.env.breakable_stmts.push(BreakableStatement {
             statement_type: stmt_type,
             location,
             depth: parser.scope_depth(),
@@ -101,7 +149,7 @@ impl<'a, 'b> BreakableStatementGuard<'a, 'b> {
 
 impl<'a, 'b> Drop for BreakableStatementGuard<'a, 'b> {
     fn drop(&mut self) {
-        self.parser.breakable_stmts.pop();
+        self.parser.env.breakable_stmts.pop();
     }
 }
 
@@ -158,6 +206,40 @@ struct BreakableStatement {
     depth: i32,
 }
 
+enum FunctionType {
+    Function,
+    Script,
+}
+
+struct FunctionEnv {
+    locals: Vec<Local>,
+    breakable_stmts: Vec<BreakableStatement>,
+    scope_depth: i32,
+    function_type: FunctionType,
+}
+
+impl FunctionEnv {
+    pub fn new(function_type: FunctionType) -> Self {
+        Self {
+            locals: Vec::new(),
+            breakable_stmts: Vec::new(),
+            scope_depth: 0,
+            function_type,
+        }
+    }
+}
+
+impl Default for FunctionEnv {
+    fn default() -> Self {
+        Self {
+            locals: Default::default(),
+            breakable_stmts: Default::default(),
+            scope_depth: Default::default(),
+            function_type: FunctionType::Script,
+        }
+    }
+}
+
 pub(crate) struct Parser<'a> {
     scanner: Scanner<'a>,
     pending_writes: VecDeque<WriteAction>,
@@ -165,9 +247,7 @@ pub(crate) struct Parser<'a> {
     pub(crate) current: TokenWithLocation,
     pub(crate) prev: TokenWithLocation,
     pub(crate) strings: HashMap<InternedString, Option<u8>>,
-    locals: Vec<Local>,
-    breakable_stmts: Vec<BreakableStatement>,
-    scope_depth: i32,
+    env: FunctionEnv,
 }
 
 impl<'a> Parser<'a> {
@@ -185,16 +265,14 @@ impl<'a> Parser<'a> {
                 location: Location::default(),
             },
             strings: HashMap::new(),
-            locals: Vec::new(),
-            breakable_stmts: Vec::new(),
-            scope_depth: 0,
+            env: FunctionEnv::new(FunctionType::Script),
         };
         parser.advance().expect("No token available in Scanner.");
         parser
     }
 
     pub fn scope_depth(&self) -> i32 {
-        self.scope_depth
+        self.env.scope_depth
     }
 
     pub fn next_write(&mut self) -> Option<WriteAction> {
@@ -213,10 +291,22 @@ impl<'a> Parser<'a> {
         LocalScope::new(self)
     }
 
+    fn locals(&self) -> &Vec<Local> {
+        &self.env.locals
+    }
+
+    fn locals_mut(&mut self) -> &mut Vec<Local> {
+        &mut self.env.locals
+    }
+
+    fn breakable_stmts(&self) -> &Vec<BreakableStatement> {
+        &self.env.breakable_stmts
+    }
+
     fn upper_bound_of_depth(&self, d: i32) -> usize {
-        let mut upper = self.locals.len();
-        for i in (0..self.locals.len()).rev() {
-            if self.locals[i].depth <= d {
+        let mut upper = self.locals().len();
+        for i in (0..self.locals().len()).rev() {
+            if self.locals()[i].depth <= d {
                 break;
             }
             upper = i;
@@ -301,11 +391,47 @@ impl<'a> Parser<'a> {
     }
 
     fn declaration(&mut self) -> Result<()> {
-        if self.next_token_is(&Token::Var)? {
+        if self.next_token_is(&Token::Fun)? {
+            self.fun_declaration()
+        } else if self.next_token_is(&Token::Var)? {
             self.var_declaration()
         } else {
             self.statement()
         }
+    }
+
+    fn fun_declaration(&mut self) -> Result<()> {
+        let ident = self.consume(IDENTIFIER_TOKEN, |t| {
+            format!(
+                "{} Expected a function name, found {:?}.",
+                t.location, t.token
+            )
+        })?;
+        let fun_name = intern_string(&mut self.strings, ident.token.id_name());
+        let mut fun_scope = FunctionDeclarationScope::new(self, fun_name, 0);
+        {
+            let mut scope = fun_scope.enter();
+            scope.consume(Token::LeftParen, |t| {
+                format!(
+                    "{} Expected '(' after the function name, found {:?}",
+                    t.location, t.token
+                )
+            })?;
+            scope.consume(Token::RightParen, |t| {
+                format!(
+                    "{} Expected ')' after the function parameters, found {:?}",
+                    t.location, t.token
+                )
+            })?;
+            scope.consume(Token::LeftBrace, |t| {
+                format!(
+                    "{} Expected '{{' before the function body, found {:?}",
+                    t.location, t.token
+                )
+            })?;
+            scope.block()?;
+        }
+        Ok(())
     }
 
     fn var_declaration(&mut self) -> Result<()> {
@@ -318,7 +444,7 @@ impl<'a> Parser<'a> {
         })?;
 
         let name = intern_string(&mut self.strings, ident.token.id_name());
-        if self.scope_depth > 0 {
+        if self.scope_depth() > 0 {
             self.declare_local(name.clone(), &ident.location)?;
         }
 
@@ -338,33 +464,33 @@ impl<'a> Parser<'a> {
             )
         })?;
 
-        if self.scope_depth == 0 {
+        if self.scope_depth() == 0 {
             writes.push(WriteAction::OpCodeWrite {
                 op_code: OpCode::DefineGlobal,
                 args: Arguments::String(name),
                 location: ident.location.clone(),
             });
         } else {
-            self.locals.last_mut().unwrap().depth = self.scope_depth;
+            self.locals_mut().last_mut().unwrap().depth = self.scope_depth();
         }
         self.pending_writes.extend(writes);
         Ok(())
     }
 
     fn declare_local(&mut self, name: InternedString, ident_location: &Location) -> Result<()> {
-        if self.locals.len() == usize::from(u8::MAX) {
+        if self.locals().len() == usize::from(u8::MAX) {
             return Err(Error::TooManyLocalVariablesError {
                 location: ident_location.clone(),
             });
         }
 
-        self.locals.push(Local {
+        self.locals_mut().push(Local {
             name: name.clone(),
             depth: -1,
         });
 
-        for local in self.locals.iter().rev() {
-            if local.depth < self.scope_depth {
+        for local in self.locals().iter().rev() {
+            if local.depth < self.scope_depth() {
                 break;
             }
 
@@ -376,13 +502,13 @@ impl<'a> Parser<'a> {
             }
         }
 
-        self.locals.last_mut().unwrap().depth = self.scope_depth;
+        self.locals_mut().last_mut().unwrap().depth = self.scope_depth();
         Ok(())
     }
 
     fn resolve_local(&self, name: &str, location: &Location) -> Result<Option<u8>> {
-        for i in (0..self.locals.len()).rev() {
-            let local = &self.locals[i];
+        for i in (0..self.locals().len()).rev() {
+            let local = &self.locals()[i];
             if local.depth == -1 {
                 return Err(Error::UninititalizedVariableAccessError {
                     location: location.clone(),
@@ -627,12 +753,12 @@ impl<'a> Parser<'a> {
     }
 
     fn break_statement(&mut self) -> Result<()> {
-        match self.breakable_stmts.last().cloned() {
+        match self.breakable_stmts().last().cloned() {
             None => Err(Error::MisplacedBreakStatementError {
                 location: self.prev.location.clone(),
             }),
             Some(stmt) => {
-                let to_pop = self.locals.len() - self.upper_bound_of_depth(stmt.depth);
+                let to_pop = self.locals().len() - self.upper_bound_of_depth(stmt.depth);
                 for _ in 0..to_pop {
                     self.write_pop(self.prev.location.clone());
                 }
@@ -662,12 +788,12 @@ impl<'a> Parser<'a> {
     }
 
     fn continue_statement(&mut self) -> Result<()> {
-        match self.breakable_stmts.last().cloned() {
+        match self.breakable_stmts().last().cloned() {
             None => Err(Error::MisplacedContinueStatementError {
                 location: self.prev.location.clone(),
             }),
             Some(stmt) => {
-                let to_pop = self.locals.len() - self.upper_bound_of_depth(stmt.depth);
+                let to_pop = self.locals().len() - self.upper_bound_of_depth(stmt.depth);
                 for _ in 0..to_pop {
                     self.write_pop(self.prev.location.clone());
                 }

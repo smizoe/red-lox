@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use red_lox_ast::scanner::{Location, Scanner};
 
@@ -6,6 +6,7 @@ use crate::{
     chunk::Chunk,
     code_location_registry::{BackPatchLocationKey, CodeLocationRegistry, LabelKey, LabelType},
     interned_string::InternedString,
+    lox_function::LoxFunction,
     op_code::OpCode,
     parser::Parser,
     value::Value,
@@ -13,12 +14,12 @@ use crate::{
 };
 
 pub struct CompilationResult {
-    pub chunk: Chunk,
+    pub script: LoxFunction,
     pub strings: HashMap<InternedString, Option<u8>>,
 }
 
 pub struct Compiler<'a> {
-    chunk: Chunk,
+    functions: Vec<LoxFunction>,
     parser: Parser<'a>,
     code_location_registry: CodeLocationRegistry,
 }
@@ -69,7 +70,7 @@ impl<'a> Compiler<'a> {
     /// Creates a new compiler that compiles the given `text``.
     pub fn new(text: &'a str) -> Self {
         Self {
-            chunk: Chunk::new(),
+            functions: vec![LoxFunction::new(InternedString::get_empty_string(), 0)],
             parser: Parser::new(Scanner::new(text)),
             code_location_registry: CodeLocationRegistry::new(),
         }
@@ -102,9 +103,9 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    pub fn finish(self) -> CompilationResult {
+    pub fn finish(mut self) -> CompilationResult {
         CompilationResult {
-            chunk: self.chunk,
+            script: self.functions.pop().unwrap(),
             strings: self.parser.strings,
         }
     }
@@ -129,6 +130,16 @@ impl<'a> Compiler<'a> {
                 self.add_label(*usage, location.clone());
                 Ok(())
             }
+            WriteAction::FunctionDeclaration { name, .. } => {
+                self.functions
+                    .push(LoxFunction::new(name.clone(), /*arity=*/ 0));
+                Ok(())
+            }
+            WriteAction::FunctionDeclarationEnd { location } => {
+                let defined = self.functions.pop().unwrap();
+                self.add_constant(Value::Function(Rc::new(defined)), location)?;
+                Ok(())
+            }
         }
     }
 
@@ -139,35 +150,36 @@ impl<'a> Compiler<'a> {
         args: &Arguments,
         location: &Location,
     ) -> Result<(), Error> {
-        let offset = self.chunk.code_len();
+        let offset = self.current_chunk().code_len();
         match op_code {
             OpCode::GetLocal => {
                 let index = try_get_offset_from(op_code, args, location)?;
-                self.chunk.add_code(OpCode::GetLocal.into());
-                self.chunk.add_code(index);
+                self.current_chunk_mut().add_code(OpCode::GetLocal.into());
+                self.current_chunk_mut().add_code(index);
             }
             OpCode::SetLocal => {
                 let index = try_get_offset_from(op_code, args, location)?;
-                self.chunk.add_code(OpCode::SetLocal.into());
-                self.chunk.add_code(index);
+                self.current_chunk_mut().add_code(OpCode::SetLocal.into());
+                self.current_chunk_mut().add_code(index);
             }
             OpCode::GetGlobal => {
                 let id = try_get_interned_string_from(op_code, args, location)?;
                 let index = self.add_constant(Value::String(id), location)?;
-                self.chunk.add_code(OpCode::GetGlobal.into());
-                self.chunk.add_code(index);
+                self.current_chunk_mut().add_code(OpCode::GetGlobal.into());
+                self.current_chunk_mut().add_code(index);
             }
             OpCode::DefineGlobal => {
                 let id = try_get_interned_string_from(op_code, args, location)?;
                 let index = self.add_constant(Value::String(id), location)?;
-                self.chunk.add_code(OpCode::DefineGlobal.into());
-                self.chunk.add_code(index);
+                self.current_chunk_mut()
+                    .add_code(OpCode::DefineGlobal.into());
+                self.current_chunk_mut().add_code(index);
             }
             OpCode::SetGlobal => {
                 let id = try_get_interned_string_from(op_code, args, location)?;
                 let index = self.add_constant(Value::String(id), location)?;
-                self.chunk.add_code(OpCode::SetGlobal.into());
-                self.chunk.add_code(index);
+                self.current_chunk_mut().add_code(OpCode::SetGlobal.into());
+                self.current_chunk_mut().add_code(index);
             }
             OpCode::Constant => {
                 let index = match args {
@@ -179,21 +191,21 @@ impl<'a> Compiler<'a> {
                         location: location.clone(),
                     }),
                 }?;
-                self.chunk.add_code(OpCode::Constant.into());
-                self.chunk.add_code(index);
+                self.current_chunk_mut().add_code(OpCode::Constant.into());
+                self.current_chunk_mut().add_code(index);
             }
             OpCode::JumpIfFalse | OpCode::Jump => {
-                self.chunk.add_code(op_code.into());
+                self.current_chunk_mut().add_code(op_code.into());
                 self.add_backpatch_location(
                     op_code,
                     args.to_label_type().unwrap(),
                     location.clone(),
                 );
-                self.chunk.add_code(u8::MAX);
-                self.chunk.add_code(u8::MAX);
+                self.current_chunk_mut().add_code(u8::MAX);
+                self.current_chunk_mut().add_code(u8::MAX);
             }
             OpCode::Loop => {
-                self.chunk.add_code(op_code.into());
+                self.current_chunk_mut().add_code(op_code.into());
                 // The backpatch logic is used sa as to support patching multiple location
                 // (e.g. the continue statement).
                 self.add_backpatch_location(
@@ -201,25 +213,28 @@ impl<'a> Compiler<'a> {
                     args.to_label_type().unwrap(),
                     location.clone(),
                 );
-                self.chunk.add_code(u8::MAX);
-                self.chunk.add_code(u8::MAX);
+                self.current_chunk_mut().add_code(u8::MAX);
+                self.current_chunk_mut().add_code(u8::MAX);
             }
-            _ => self.chunk.add_code(op_code.into()),
+            _ => self.current_chunk_mut().add_code(op_code.into()),
         }
-        self.chunk.maybe_update_line_info(offset, location.line);
+        self.current_chunk_mut()
+            .maybe_update_line_info(offset, location.line);
         Ok(())
     }
 
     fn add_label(&mut self, usage: LabelType, location: Location) {
-        self.code_location_registry
-            .add_label(LabelKey::new(usage, location), self.chunk.code_len());
+        self.code_location_registry.add_label(
+            LabelKey::new(usage, location),
+            self.current_chunk().code_len(),
+        );
     }
 
     fn add_backpatch_location(&mut self, op_code: OpCode, usage: LabelType, location: Location) {
         self.code_location_registry.add_backpatch_location(
             BackPatchLocationKey::new(usage, location),
             op_code,
-            self.chunk.code_len(),
+            self.current_chunk().code_len(),
         );
     }
 
@@ -237,14 +252,16 @@ impl<'a> Compiler<'a> {
             match op_code {
                 OpCode::JumpIfFalse | OpCode::Jump => {
                     for backpatch_start in backpatch_starts {
-                        let jump_offset = self.chunk.code_len() - backpatch_start - 2;
+                        let jump_offset = self.current_chunk().code_len() - backpatch_start - 2;
                         let values = u16::try_from(jump_offset)
                             .map_err(|_| Error::TooLongJumpError {
                                 location: location.clone(),
                             })?
                             .to_be_bytes();
-                        self.chunk.set_code(backpatch_start, values[0]);
-                        self.chunk.set_code(backpatch_start + 1, values[1]);
+                        self.current_chunk_mut()
+                            .set_code(backpatch_start, values[0]);
+                        self.current_chunk_mut()
+                            .set_code(backpatch_start + 1, values[1]);
                     }
                 }
                 OpCode::Loop => {
@@ -259,8 +276,10 @@ impl<'a> Compiler<'a> {
                                 location: location.clone(),
                             })?
                             .to_be_bytes();
-                        self.chunk.set_code(backpatch_start, values[0]);
-                        self.chunk.set_code(backpatch_start + 1, values[1]);
+                        self.current_chunk_mut()
+                            .set_code(backpatch_start, values[0]);
+                        self.current_chunk_mut()
+                            .set_code(backpatch_start + 1, values[1]);
                     }
                 }
                 _ => unreachable!(),
@@ -279,24 +298,32 @@ impl<'a> Compiler<'a> {
                     // this is Some(None)
                     let index = self.get_next_index_for_constant(&location)?;
                     self.parser.strings.insert(s.clone(), Some(index));
-                    self.chunk.add_constant(value);
+                    self.current_chunk_mut().add_constant(value);
                     Ok(index)
                 }
             },
             _ => {
                 let index = self.get_next_index_for_constant(&location)?;
-                self.chunk.add_constant(value);
+                self.current_chunk_mut().add_constant(value);
                 Ok(index)
             }
         }
     }
 
     fn get_next_index_for_constant(&mut self, location: &Location) -> Result<u8, Error> {
-        u8::try_from(self.chunk.get_num_constants()).map_err(move |_| {
+        u8::try_from(self.current_chunk().get_num_constants()).map_err(move |_| {
             Error::TooManyConstantsError {
                 location: location.clone(),
             }
         })
+    }
+
+    fn current_chunk(&self) -> &Chunk {
+        &self.functions.last().unwrap().chunk
+    }
+
+    fn current_chunk_mut(&mut self) -> &mut Chunk {
+        &mut self.functions.last_mut().unwrap().chunk
     }
 }
 
@@ -319,7 +346,7 @@ mod tests {
         let result = compiler.finish();
         let mut v = Vec::<u8>::new();
         let mut cursor = Cursor::new(&mut v);
-        disassemble_chunk_for_testing(&result.chunk, &mut cursor);
+        disassemble_chunk_for_testing(&result.script.chunk, &mut cursor);
         Ok(String::from_utf8(v)
             .map_err(|e| format!("Failed to convert the disassembled code to String {:?}", e))?)
     }

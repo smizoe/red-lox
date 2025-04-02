@@ -3,6 +3,7 @@ mod code_location_registry;
 pub mod compiler;
 pub mod debug;
 mod interned_string;
+mod lox_function;
 mod op_code;
 mod parser;
 mod parsing_rule;

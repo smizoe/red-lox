@@ -1,23 +1,44 @@
-use std::{collections::HashMap, io::Write};
+use std::{collections::HashMap, io::Write, rc::Rc};
 
 use crate::{
     chunk::Chunk,
     debug::disassemble_instruction,
     interned_string::{intern_string, InternedString},
+    lox_function::LoxFunction,
     op_code::OpCode,
     value::Value,
 };
 
-const STACK_MAX: usize = 256;
+const FRAMES_MAX: usize = 64;
+const STACK_MAX: usize = 256 * FRAMES_MAX;
 
-pub struct VirtualMachine<'a, 'b> {
-    chunk: &'a Chunk,
-    ip: usize,
+pub struct VirtualMachine<'a> {
     stack: [Option<Value>; STACK_MAX],
     stack_top: usize,
-    out: &'b mut dyn Write,
+    frames: [Option<CallFrame>; FRAMES_MAX],
+    frame_count: usize,
+    out: &'a mut dyn Write,
     strings: HashMap<InternedString, Option<u8>>,
     globals: HashMap<InternedString, Value>,
+}
+
+struct CallFrame {
+    // The function associated with the current frame.
+    pub function: Rc<LoxFunction>,
+    // The instruction pointer/index for the current frame.
+    pub ip: usize,
+    // The bottom (the index into the 0-th byte in the stack) of the current frame.
+    pub slot_start: usize,
+}
+
+impl CallFrame {
+    pub fn new(function: Rc<LoxFunction>, ip: usize, slot_index: usize) -> Self {
+        Self {
+            function,
+            ip,
+            slot_start: slot_index,
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -41,21 +62,23 @@ pub enum Error {
     UndefinedVariableError { line: usize, var_name: String },
 }
 
-impl<'a, 'b> VirtualMachine<'a, 'b> {
+impl<'a> VirtualMachine<'a> {
     pub fn new(
-        chunk: &'a Chunk,
+        script: LoxFunction,
         strings: HashMap<InternedString, Option<u8>>,
-        out: &'b mut dyn Write,
+        out: &'a mut dyn Write,
     ) -> Self {
-        Self {
-            chunk,
-            ip: 0,
+        let mut vm = Self {
             stack: std::array::from_fn(|_| None),
             stack_top: 0,
+            frames: std::array::from_fn(|_| None),
+            frame_count: 1,
             out,
             strings,
             globals: HashMap::new(),
-        }
+        };
+        vm.frames[0].replace(CallFrame::new(Rc::new(script), 0, 0));
+        vm
     }
 
     pub fn interpret(&mut self) -> Result<(), Error> {
@@ -65,11 +88,11 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
         loop {
             if cfg!(debug_assertions) {
                 self.print_stack();
-                disassemble_instruction(self.ip, &self.chunk);
+                disassemble_instruction(self.ip(), self.chunk());
             }
             let op = OpCode::try_from(self.read_byte()).map_err(|error| {
                 Error::OperationConversionError {
-                    line: self.ip - 1,
+                    line: self.ip() - 1,
                     error,
                 }
             })?;
@@ -88,11 +111,11 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
                 }
                 OpCode::GetLocal => {
                     let index = self.read_byte();
-                    self.push(self.stack[index as usize].clone().unwrap());
+                    self.push(self.slot(index.into()).clone());
                 }
                 OpCode::SetLocal => {
                     let index = self.read_byte();
-                    self.stack[index as usize].replace(self.peek(0)?.clone());
+                    *self.slot_mut(index.into()) = self.peek(0)?.clone();
                 }
                 OpCode::GetGlobal => match self.get_constant() {
                     Value::String(s) => {
@@ -100,7 +123,7 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
                             self.globals
                                 .get(&s)
                                 .ok_or_else(|| Error::UndefinedVariableError {
-                                    line: self.line_of(self.ip - 1),
+                                    line: self.line_of(self.ip() - 1),
                                     var_name: s.to_string(),
                                 })?;
                         self.push(v.clone());
@@ -118,7 +141,7 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
                     Value::String(s) => {
                         if !self.globals.contains_key(&s) {
                             return Err(Error::UndefinedVariableError {
-                                line: self.line_of(self.ip - 1),
+                                line: self.line_of(self.ip() - 1),
                                 var_name: s.to_string(),
                             });
                         }
@@ -139,7 +162,7 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
                         let v = self.peek(0)?;
                         if !v.is_number() {
                             return Err(Error::InvalidOperandError {
-                                line: self.line_of(self.ip - 1),
+                                line: self.line_of(self.ip() - 1),
                                 msg: format!(
                                     "Operand of unary minus must be a number but found a {}",
                                     v.to_type_str()
@@ -157,16 +180,16 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
                 OpCode::JumpIfFalse => {
                     let jump_size = self.read_short();
                     if self.peek(0)?.is_falsy() {
-                        self.ip += usize::from(jump_size);
+                        *self.ip_mut() += usize::from(jump_size);
                     }
                 }
                 OpCode::Jump => {
                     let jump_size = self.read_short();
-                    self.ip += usize::from(jump_size);
+                    *self.ip_mut() += usize::from(jump_size);
                 }
                 OpCode::Loop => {
                     let jump_size = self.read_short();
-                    self.ip -= usize::from(jump_size);
+                    *self.ip_mut() -= usize::from(jump_size);
                 }
                 OpCode::Return => {
                     return Ok(());
@@ -243,27 +266,48 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
         }
     }
 
+    fn frame(&self) -> &CallFrame {
+        self.frames[self.frame_count - 1].as_ref().unwrap()
+    }
+
+    fn frame_mut(&mut self) -> &mut CallFrame {
+        self.frames[self.frame_count - 1].as_mut().unwrap()
+    }
+
+    fn chunk(&self) -> &Chunk {
+        &self.frame().function.chunk
+    }
+
+    fn ip(&self) -> usize {
+        self.frame().ip
+    }
+
+    fn ip_mut(&mut self) -> &mut usize {
+        &mut self.frame_mut().ip
+    }
+
     fn get_constant(&mut self) -> Value {
-        self.chunk.get_constant(self.read_byte().into())
+        let id = self.read_byte();
+        self.chunk().get_constant(id.into())
     }
 
     fn read_byte(&mut self) -> u8 {
-        let v = self.chunk.get_code(self.ip);
-        self.ip += 1;
+        let v = self.chunk().get_code(self.ip());
+        *self.ip_mut() += 1;
         v
     }
 
     fn read_short(&mut self) -> u16 {
         let v = u16::from_be_bytes([
-            self.chunk.get_code(self.ip),
-            self.chunk.get_code(self.ip + 1),
+            self.chunk().get_code(self.ip()),
+            self.chunk().get_code(self.ip() + 1),
         ]);
-        self.ip += 2;
+        *self.ip_mut() += 2;
         v
     }
 
     fn line_of(&self, offset: usize) -> usize {
-        self.chunk.line_of(offset)
+        self.chunk().line_of(offset)
     }
 
     fn push(&mut self, value: Value) {
@@ -276,14 +320,14 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
         let mut v = None;
         std::mem::swap(&mut self.stack[self.stack_top], &mut v);
         v.ok_or(Error::UninitializedStackReferenceError {
-            line: self.line_of(self.ip - 1),
+            line: self.line_of(self.ip() - 1),
         })
     }
 
     fn peek(&self, depth: usize) -> Result<&Value, Error> {
         self.stack[self.stack_top - 1 - depth].as_ref().ok_or(
             Error::UninitializedStackReferenceError {
-                line: self.line_of(self.ip - 1),
+                line: self.line_of(self.ip() - 1),
             },
         )
     }
@@ -296,7 +340,7 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
             (_, String(_)) => Ok(()),
             (lhs, rhs) => {
                 return Err(Error::InvalidOperandError {
-                    line: self.line_of(self.ip - 1),
+                    line: self.line_of(self.ip() - 1),
                     msg: format!(
                         "The operands of OP_PLUS must be two numbers or one of them must be a string but got lhs: {}, rhs: {}",
                         lhs.to_type_str(),
@@ -314,7 +358,7 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
             (String(_), String(_)) => Ok(()),
             (lhs, rhs) => {
                 return Err(Error::InvalidOperandError {
-                    line: self.line_of(self.ip - 1),
+                    line: self.line_of(self.ip() - 1),
                     msg: format!(
                         "The operands of {} must be two numbers or two strings but got lhs: {}, rhs: {}",
                         op_code,
@@ -332,7 +376,7 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
             (Number(_), Number(_)) => Ok(()),
             (lhs, rhs) => {
                 return Err(Error::InvalidOperandError {
-                    line: self.line_of(self.ip - 1),
+                    line: self.line_of(self.ip() - 1),
                     msg: format!(
                         "The operands of {} must be two numbers but got lhs: {}, rhs: {}",
                         op_code,
@@ -353,11 +397,24 @@ impl<'a, 'b> VirtualMachine<'a, 'b> {
                 Bool(b) => println!("[{:^7}]", b),
                 Number(v) => println!("[{:^7.3}]", v),
                 String(_) => println!("[string ]"),
+                Function(_) => todo!(),
             }
         }
     }
 
     fn intern_string(&mut self, s: &str) -> InternedString {
         intern_string(&mut self.strings, s)
+    }
+
+    fn slot(&self, index: usize) -> &Value {
+        self.stack[self.frame().slot_start + index]
+            .as_ref()
+            .unwrap()
+    }
+
+    fn slot_mut(&mut self, index: usize) -> &mut Value {
+        self.stack[self.frame().slot_start + index]
+            .as_mut()
+            .unwrap()
     }
 }

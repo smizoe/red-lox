@@ -1,5 +1,6 @@
 use crate::value::Value;
 
+#[derive(Clone, PartialEq)]
 pub struct Chunk {
     code: Vec<u8>,
     constants: Vec<Value>,

@@ -2,11 +2,21 @@ use std::{
     borrow::Borrow,
     collections::HashMap,
     fmt::Display,
-    rc::Rc,
+    sync::{Arc, LazyLock},
 };
 
+// A struct representing a string that is allocated once and can be used
+// multiple times with a smaller overhead. Arc is used to create an empty InternedString.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct InternedString(Rc<String>);
+pub struct InternedString(Arc<String>);
+
+impl InternedString {
+    pub(crate) fn get_empty_string() -> Self {
+        static EMPTY: LazyLock<InternedString> =
+            LazyLock::new(|| InternedString(Arc::new(String::new())));
+        EMPTY.clone()
+    }
+}
 
 impl Borrow<str> for InternedString {
     fn borrow(&self) -> &str {
@@ -33,7 +43,7 @@ pub(crate) fn intern_string(
     match strings.get_key_value(s) {
         Some((k, _)) => k.clone(),
         None => {
-            let v = InternedString(Rc::new(s.to_string()));
+            let v = InternedString(Arc::new(s.to_string()));
             strings.insert(v.clone(), None);
             v
         }

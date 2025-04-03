@@ -69,9 +69,9 @@ impl<'a> VirtualMachine<'a> {
         out: &'a mut dyn Write,
     ) -> Self {
         let mut vm = Self {
-            stack: std::array::from_fn(|_| None),
+            stack: [const { None }; STACK_MAX],
             stack_top: 0,
-            frames: std::array::from_fn(|_| None),
+            frames: [const { None }; FRAMES_MAX],
             frame_count: 1,
             out,
             strings,

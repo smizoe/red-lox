@@ -1,11 +1,11 @@
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     ops::{Deref, DerefMut},
 };
 
 use crate::{
     code_location_registry::LabelType,
-    interned_string::{intern_string, InternedString},
+    interned_string::{InternedString, InternedStringRegistry},
     op_code::OpCode,
     parsing_rule::*,
     write_action::{Arguments, WriteAction},
@@ -250,7 +250,7 @@ pub(crate) struct Parser<'a> {
     pub(crate) errors: Vec<Error>,
     pub(crate) current: TokenWithLocation,
     pub(crate) prev: TokenWithLocation,
-    pub(crate) strings: HashMap<InternedString, Option<u8>>,
+    pub(crate) interned_string_registry: InternedStringRegistry,
     env: FunctionEnv,
 }
 
@@ -268,7 +268,7 @@ impl<'a> Parser<'a> {
                 token: Token::Eof,
                 location: Location::default(),
             },
-            strings: HashMap::new(),
+            interned_string_registry: InternedStringRegistry::new(),
             env: FunctionEnv::new(FunctionType::Script),
         };
         parser.advance().expect("No token available in Scanner.");
@@ -411,13 +411,17 @@ impl<'a> Parser<'a> {
                 t.location, t.token
             )
         })?;
-        let fun_name = intern_string(&mut &mut self.strings, ident.token.id_name());
+        let fun_name = self
+            .interned_string_registry
+            .intern_string(ident.token.id_name());
         let args = self.get_fun_args()?;
         let mut fun_scope = FunctionDeclarationScope::new(self, fun_name, args.len());
         {
             let mut scope = fun_scope.enter();
             for arg in args {
-                let name = intern_string(&mut &mut scope.strings, arg.token.id_name());
+                let name = scope
+                    .interned_string_registry
+                    .intern_string(arg.token.id_name());
                 scope.declare_local(name, &arg.location)?;
                 scope.mark_most_recent_local_initialized();
             }
@@ -471,7 +475,9 @@ impl<'a> Parser<'a> {
             )
         })?;
 
-        let name = intern_string(&mut &mut self.strings, ident.token.id_name());
+        let name = self
+            .interned_string_registry
+            .intern_string(ident.token.id_name());
         if self.scope_depth() > 0 {
             self.declare_local(name.clone(), &ident.location)?;
         }
@@ -891,7 +897,10 @@ impl<'a> Parser<'a> {
     }
 
     fn variable(&mut self, can_assign: bool) -> Result<()> {
-        let id = intern_string(&mut self.strings, self.prev.token.id_name());
+        let id = self
+            .interned_string_registry
+            .intern_string(self.prev.token.id_name());
+
         let (set_op, get_op, args) = match self.resolve_local(id.as_ref(), &self.prev.location)? {
             Some(v) => (OpCode::SetLocal, OpCode::GetLocal, Arguments::Offset(v)),
             None => (OpCode::SetGlobal, OpCode::GetGlobal, Arguments::String(id)),
@@ -977,7 +986,7 @@ impl<'a> Parser<'a> {
             Token::String(s) => s,
             _ => unreachable!(),
         };
-        let v = intern_string(&mut self.strings, s);
+        let v = self.interned_string_registry.intern_string(s);
         self.pending_writes.push_back(WriteAction::OpCodeWrite {
             op_code: OpCode::Constant,
             args: Arguments::String(v),

@@ -57,7 +57,7 @@ where
     if cfg!(debug_assertions) {
         disassemble_chunk(&result.script.chunk(), "__interpreter__");
     }
-    let mut vm = VirtualMachine::new(result.script, result.strings, out);
+    let mut vm = VirtualMachine::new(result.script, result.interned_string_registry, out);
     if let Err(e) = vm.interpret() {
         return Err(anyhow!("Failed to interpret the statement: {}", e));
     }

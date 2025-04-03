@@ -1,6 +1,6 @@
 use std::{
     borrow::Borrow,
-    collections::HashMap,
+    collections::HashSet,
     fmt::Display,
     sync::{Arc, LazyLock},
 };
@@ -15,6 +15,10 @@ impl InternedString {
         static EMPTY: LazyLock<InternedString> =
             LazyLock::new(|| InternedString(Arc::new(String::new())));
         EMPTY.clone()
+    }
+
+    pub(crate) fn from_str(s: &str) -> InternedString {
+        InternedString(Arc::new(s.to_string()))
     }
 }
 
@@ -36,16 +40,22 @@ impl Display for InternedString {
     }
 }
 
-pub(crate) fn intern_string(
-    strings: &mut HashMap<InternedString, Option<u8>>,
-    s: &str,
-) -> InternedString {
-    match strings.get_key_value(s) {
-        Some((k, _)) => k.clone(),
-        None => {
-            let v = InternedString(Arc::new(s.to_string()));
-            strings.insert(v.clone(), None);
-            v
+pub struct InternedStringRegistry {
+    registry: HashSet<InternedString>,
+}
+
+impl InternedStringRegistry {
+    pub(crate) fn new() -> Self {
+        Self {
+            registry: Default::default(),
         }
+    }
+
+    pub fn intern_string(&mut self, s: &str) -> InternedString {
+        self.registry.get(s).cloned().unwrap_or_else(|| {
+            let interned = InternedString::from_str(s);
+            self.registry.insert(interned.clone());
+            interned
+        })
     }
 }

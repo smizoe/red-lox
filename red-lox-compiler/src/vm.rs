@@ -3,7 +3,7 @@ use std::{collections::HashMap, io::Write, rc::Rc};
 use crate::{
     chunk::Chunk,
     debug::disassemble_instruction,
-    interned_string::{intern_string, InternedString},
+    interned_string::{InternedString, InternedStringRegistry},
     lox_function::LoxFunction,
     op_code::OpCode,
     value::Value,
@@ -18,7 +18,7 @@ pub struct VirtualMachine<'a> {
     frames: [Option<CallFrame>; FRAMES_MAX],
     frame_count: usize,
     out: &'a mut dyn Write,
-    strings: HashMap<InternedString, Option<u8>>,
+    interned_string_registry: InternedStringRegistry,
     globals: HashMap<InternedString, Value>,
 }
 
@@ -65,7 +65,7 @@ pub enum Error {
 impl<'a> VirtualMachine<'a> {
     pub fn new(
         script: LoxFunction,
-        strings: HashMap<InternedString, Option<u8>>,
+        interned_string_registry: InternedStringRegistry,
         out: &'a mut dyn Write,
     ) -> Self {
         let mut vm = Self {
@@ -74,7 +74,7 @@ impl<'a> VirtualMachine<'a> {
             frames: [const { None }; FRAMES_MAX],
             frame_count: 1,
             out,
-            strings,
+            interned_string_registry,
             globals: HashMap::new(),
         };
         vm.frames[0].replace(CallFrame::new(Rc::new(script), 0, 0));
@@ -403,7 +403,7 @@ impl<'a> VirtualMachine<'a> {
     }
 
     fn intern_string(&mut self, s: &str) -> InternedString {
-        intern_string(&mut self.strings, s)
+        self.interned_string_registry.intern_string(s)
     }
 
     fn slot(&self, index: usize) -> &Value {

@@ -1,11 +1,11 @@
-use std::{collections::HashMap, rc::Rc};
+use std::rc::Rc;
 
 use red_lox_ast::scanner::{Location, Scanner};
 
 use crate::{
     chunk::Chunk,
     code_location_registry::{BackPatchLocationKey, CodeLocationRegistry, LabelKey, LabelType},
-    interned_string::InternedString,
+    interned_string::{InternedString, InternedStringRegistry},
     lox_function::LoxFunction,
     op_code::OpCode,
     parser::Parser,
@@ -15,7 +15,7 @@ use crate::{
 
 pub struct CompilationResult {
     pub script: LoxFunction,
-    pub strings: HashMap<InternedString, Option<u8>>,
+    pub interned_string_registry: InternedStringRegistry,
 }
 
 pub struct Compiler<'a> {
@@ -106,7 +106,7 @@ impl<'a> Compiler<'a> {
     pub fn finish(mut self) -> CompilationResult {
         CompilationResult {
             script: self.functions.pop().unwrap(),
-            strings: self.parser.strings,
+            interned_string_registry: self.parser.interned_string_registry,
         }
     }
 
@@ -304,23 +304,9 @@ impl<'a> Compiler<'a> {
     }
 
     fn add_constant(&mut self, value: Value, location: &Location) -> Result<u8, Error> {
-        match &value {
-            Value::String(s) => match self.parser.strings.get(s) {
-                Some(Some(v)) => return Ok(*v),
-                _ => {
-                    // this is Some(None)
-                    let index = self.get_next_index_for_constant(&location)?;
-                    self.parser.strings.insert(s.clone(), Some(index));
-                    self.current_chunk_mut().add_constant(value);
-                    Ok(index)
-                }
-            },
-            _ => {
-                let index = self.get_next_index_for_constant(&location)?;
-                self.current_chunk_mut().add_constant(value);
-                Ok(index)
-            }
-        }
+        let index = self.get_next_index_for_constant(&location)?;
+        self.current_chunk_mut().add_constant(value);
+        Ok(index)
     }
 
     fn get_next_index_for_constant(&mut self, location: &Location) -> Result<u8, Error> {

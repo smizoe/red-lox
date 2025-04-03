@@ -396,8 +396,8 @@ impl<'a> VirtualMachine<'a> {
                 Nil => println!("[  nil  ]"),
                 Bool(b) => println!("[{:^7}]", b),
                 Number(v) => println!("[{:^7.3}]", v),
-                String(_) => println!("[string ]"),
-                Function(_) => todo!(),
+                String(s) => println!("[{:^7}]", s),
+                Function(f) => println!("[{:^7}]", f),
             }
         }
     }

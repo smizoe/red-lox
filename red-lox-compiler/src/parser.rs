@@ -112,9 +112,13 @@ impl<'a, 'b> Drop for FunctionDeclarationScope<'a, 'b> {
     fn drop(&mut self) {
         let location = self.prev.location.clone();
         let mut prev_env = std::mem::take(&mut self.prev_env);
+        let is_global = self.scope_depth() == 0;
         std::mem::swap(&mut self.env, &mut prev_env);
         self.pending_writes
-            .push_back(WriteAction::FunctionDeclarationEnd { location });
+            .push_back(WriteAction::FunctionDeclarationEnd {
+                is_global,
+                location,
+            });
     }
 }
 
@@ -407,22 +411,16 @@ impl<'a> Parser<'a> {
                 t.location, t.token
             )
         })?;
-        let fun_name = intern_string(&mut self.strings, ident.token.id_name());
-        let mut fun_scope = FunctionDeclarationScope::new(self, fun_name, 0);
+        let fun_name = intern_string(&mut &mut self.strings, ident.token.id_name());
+        let args = self.get_fun_args()?;
+        let mut fun_scope = FunctionDeclarationScope::new(self, fun_name, args.len());
         {
             let mut scope = fun_scope.enter();
-            scope.consume(Token::LeftParen, |t| {
-                format!(
-                    "{} Expected '(' after the function name, found {:?}",
-                    t.location, t.token
-                )
-            })?;
-            scope.consume(Token::RightParen, |t| {
-                format!(
-                    "{} Expected ')' after the function parameters, found {:?}",
-                    t.location, t.token
-                )
-            })?;
+            for arg in args {
+                let name = intern_string(&mut &mut scope.strings, arg.token.id_name());
+                scope.declare_local(name, &arg.location)?;
+                scope.mark_most_recent_local_initialized();
+            }
             scope.consume(Token::LeftBrace, |t| {
                 format!(
                     "{} Expected '{{' before the function body, found {:?}",
@@ -434,6 +432,36 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    fn get_fun_args(&mut self) -> Result<Vec<TokenWithLocation>> {
+        let mut args = Vec::new();
+        self.consume(Token::LeftParen, |t| {
+            format!(
+                "{} Expected '(' after the function name, found {:?}",
+                t.location, t.token
+            )
+        })?;
+        if !self.check(&Token::RightParen) {
+            loop {
+                args.push(self.consume(IDENTIFIER_TOKEN.clone(), |t| {
+                    format!(
+                        "{} Expected an identifier token as a function parameter, found {:?}",
+                        t.location, t.token
+                    )
+                })?);
+                if !self.next_token_is(&Token::Comma)? {
+                    break;
+                }
+            }
+        }
+        self.consume(Token::RightParen, |t| {
+            format!(
+                "{} Expected ')' after the function parameters, found {:?}",
+                t.location, t.token
+            )
+        })?;
+        Ok(args)
+    }
+
     fn var_declaration(&mut self) -> Result<()> {
         let mut writes = Vec::with_capacity(2);
         let ident = self.consume(IDENTIFIER_TOKEN, |t| {
@@ -443,7 +471,7 @@ impl<'a> Parser<'a> {
             )
         })?;
 
-        let name = intern_string(&mut self.strings, ident.token.id_name());
+        let name = intern_string(&mut &mut self.strings, ident.token.id_name());
         if self.scope_depth() > 0 {
             self.declare_local(name.clone(), &ident.location)?;
         }
@@ -471,7 +499,7 @@ impl<'a> Parser<'a> {
                 location: ident.location.clone(),
             });
         } else {
-            self.locals_mut().last_mut().unwrap().depth = self.scope_depth();
+            self.mark_most_recent_local_initialized();
         }
         self.pending_writes.extend(writes);
         Ok(())
@@ -502,7 +530,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        self.locals_mut().last_mut().unwrap().depth = self.scope_depth();
+        self.mark_most_recent_local_initialized();
         Ok(())
     }
 
@@ -1013,5 +1041,9 @@ impl<'a> Parser<'a> {
             });
         }
         Ok(())
+    }
+
+    fn mark_most_recent_local_initialized(&mut self) {
+        self.locals_mut().last_mut().unwrap().depth = self.scope_depth();
     }
 }

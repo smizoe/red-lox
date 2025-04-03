@@ -1,6 +1,8 @@
+use std::rc::Rc;
+
 use red_lox_ast::scanner::Location;
 
-use crate::{code_location_registry::LabelType, interned_string::InternedString, op_code::OpCode};
+use crate::{code_location_registry::LabelType, interned_string::InternedString, lox_function::LoxFunction, op_code::OpCode};
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Arguments {
@@ -9,6 +11,7 @@ pub(crate) enum Arguments {
     Number(f64),
     Offset(u8),
     LabelType(LabelType),
+    Function(Rc<LoxFunction>),
 }
 
 impl std::fmt::Display for Arguments {
@@ -65,6 +68,7 @@ pub(crate) enum WriteAction {
         location: Location,
     },
     FunctionDeclarationEnd {
+        is_global: bool,
         location: Location,
     },
 }
@@ -76,7 +80,7 @@ impl WriteAction {
             WriteAction::BackPatchJumpLocation { location, .. } => location,
             WriteAction::AddLabel { location, .. } => location,
             WriteAction::FunctionDeclaration { location, .. } => location,
-            WriteAction::FunctionDeclarationEnd { location } => location,
+            WriteAction::FunctionDeclarationEnd { location, .. } => location,
         }
     }
 }

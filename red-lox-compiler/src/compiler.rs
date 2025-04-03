@@ -130,14 +130,24 @@ impl<'a> Compiler<'a> {
                 self.add_label(*usage, location.clone());
                 Ok(())
             }
-            WriteAction::FunctionDeclaration { name, .. } => {
-                self.functions
-                    .push(LoxFunction::new(name.clone(), /*arity=*/ 0));
+            WriteAction::FunctionDeclaration { name, arity, .. } => {
+                self.functions.push(LoxFunction::new(name.clone(), *arity));
                 Ok(())
             }
-            WriteAction::FunctionDeclarationEnd { location } => {
+            WriteAction::FunctionDeclarationEnd {
+                is_global,
+                location,
+            } => {
                 let defined = self.functions.pop().unwrap();
-                self.add_constant(Value::Function(Rc::new(defined)), location)?;
+                let name = defined.name.clone();
+                self.write_op_code(
+                    OpCode::Constant,
+                    &Arguments::Function(Rc::new(defined)),
+                    location,
+                )?;
+                if *is_global {
+                    self.write_op_code(OpCode::DefineGlobal, &Arguments::String(name), location)?;
+                }
                 Ok(())
             }
         }
@@ -185,6 +195,9 @@ impl<'a> Compiler<'a> {
                 let index = match args {
                     Arguments::Number(v) => self.add_constant(Value::Number(*v), location),
                     Arguments::String(s) => self.add_constant(Value::String(s.clone()), location),
+                    Arguments::Function(f) => {
+                        self.add_constant(Value::Function(f.clone()), location)
+                    }
                     _ => Err(Error::UnsupportedArgumentError {
                         op_code,
                         args: args.to_string(),

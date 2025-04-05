@@ -153,6 +153,11 @@ impl<'a> Compiler<'a> {
                 is_global,
                 location,
             } => {
+                // Ensure that the function `return`s. If the function already has a
+                // return statement, the op codes added here do nothing.
+                self.write_op_code(OpCode::Nil, &Arguments::None, location)?;
+                self.write_op_code(OpCode::Return, &Arguments::None, location)?;
+
                 let defined = self.functions.pop().unwrap();
                 let name = defined.name.clone();
                 self.write_op_code(

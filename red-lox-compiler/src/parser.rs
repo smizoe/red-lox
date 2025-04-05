@@ -36,6 +36,8 @@ pub enum Error {
     MisplacedContinueStatementError { location: Location },
     #[error("{location} A function can't have more than 255 arguments.")]
     TooManyFunctionArgumentsError { location: Location },
+    #[error("{location} Cannot return from the top-level code.")]
+    ReturnFromTopLevelError { location: Location },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -87,7 +89,7 @@ impl<'a> Parser<'a> {
                 location: Location::default(),
             },
             interned_string_registry: InternedStringRegistry::new(),
-            env: FunctionEnv::new(FunctionType::Script),
+            env: FunctionEnv::new(InternedString::get_empty_string(),FunctionType::Script),
         };
         parser.advance().expect("No token available in Scanner.");
         parser
@@ -358,7 +360,6 @@ impl<'a> Parser<'a> {
             }
         }
 
-        self.mark_most_recent_local_initialized();
         Ok(())
     }
 
@@ -385,6 +386,8 @@ impl<'a> Parser<'a> {
             self.for_statement()
         } else if self.next_token_is(&Token::If)? {
             self.if_statement()
+        } else if self.next_token_is(&Token::Return)? {
+            self.return_statement()
         } else if self.next_token_is(&Token::While)? {
             self.while_statement()
         } else if self.next_token_is(&Token::LeftBrace)? {
@@ -563,8 +566,40 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn write_pop(&mut self, location: Location) {
-        self.pending_writes.push_back(WriteAction::OpCodeWrite {
+        self.append_write(WriteAction::OpCodeWrite {
             op_code: OpCode::Pop,
+            args: Arguments::None,
+            location,
+        });
+    }
+
+    fn return_statement(&mut self) -> Result<()> {
+        let location = self.prev.location.clone();
+        if self.env.function_type == FunctionType::Script {
+            return Err(Error::ReturnFromTopLevelError { location });
+        }
+        if self.check(&Token::Semicolon) {
+            self.append_write(WriteAction::OpCodeWrite {
+                op_code: OpCode::Nil,
+                args: Arguments::None,
+                location: location.clone(),
+            });
+        } else {
+            self.expression()?;
+        }
+        self.consume(Token::Semicolon, |t| {
+            format!(
+                "{} Expected ';' after the return statement, found {:?}",
+                t.location, t.token
+            )
+        })?;
+        self.write_return(location);
+        Ok(())
+    }
+
+    fn write_return(&mut self, location: Location) {
+        self.append_write(WriteAction::OpCodeWrite {
+            op_code: OpCode::Return,
             args: Arguments::None,
             location,
         });
@@ -810,7 +845,8 @@ impl<'a> Parser<'a> {
         let mut count = 0;
         if !self.check(&Token::RightParen) {
             loop {
-                self.expression()?;
+                // call assignment() to avoid using the parsing rule for the comma expression
+                self.assignment()?;
                 if count == u8::MAX {
                     return Err(Error::TooManyFunctionArgumentsError {
                         location: self.prev.location.clone(),

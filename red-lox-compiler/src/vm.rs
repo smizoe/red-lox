@@ -81,7 +81,9 @@ impl<'a> VirtualMachine<'a> {
             interned_string_registry,
             globals: HashMap::new(),
         };
-        vm.frames[0].replace(CallFrame::new(Rc::new(script), 0, 0));
+        let fun = Rc::new(script);
+        vm.frames[0].replace(CallFrame::new(fun.clone(), 0, 0));
+        vm.push(Value::Function(fun));
         vm
     }
 

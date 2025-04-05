@@ -14,11 +14,11 @@ pub(crate) struct FunctionDeclarationScope<'a, 'b> {
 impl<'a, 'b> FunctionDeclarationScope<'a, 'b> {
     pub fn new(parser: &'b mut Parser<'a>, fun_name: InternedString, arity: usize) -> Self {
         parser.append_write(WriteAction::FunctionDeclaration {
-            name: fun_name,
+            name: fun_name.clone(),
             arity,
             location: parser.prev.location.clone(),
         });
-        let mut env = FunctionEnv::new(FunctionType::Function);
+        let mut env = FunctionEnv::new(fun_name, FunctionType::Function);
         std::mem::swap(&mut parser.env, &mut env);
 
         Self {
@@ -31,9 +31,8 @@ impl<'a, 'b> FunctionDeclarationScope<'a, 'b> {
 impl<'a, 'b> Drop for FunctionDeclarationScope<'a, 'b> {
     fn drop(&mut self) {
         let location = self.prev.location.clone();
-        let mut prev_env = std::mem::take(&mut self.prev_env);
         let is_global = self.scope_depth() == 0;
-        std::mem::swap(&mut self.env, &mut prev_env);
+        std::mem::swap(&mut self.parser.env, &mut self.prev_env);
         self.append_write(WriteAction::FunctionDeclarationEnd {
             is_global,
             location,
@@ -63,9 +62,14 @@ pub(crate) struct FunctionEnv {
 }
 
 impl FunctionEnv {
-    pub fn new(function_type: FunctionType) -> Self {
+    pub fn new(fun_name: InternedString, function_type: FunctionType) -> Self {
+        let mut locals = Vec::new();
+        locals.push(Local {
+            name: fun_name,
+            depth: 0,
+        });
         Self {
-            locals: Vec::new(),
+            locals,
             breakable_stmts: Vec::new(),
             scope_depth: 0,
             function_type,
@@ -77,17 +81,7 @@ impl FunctionEnv {
     }
 }
 
-impl Default for FunctionEnv {
-    fn default() -> Self {
-        Self {
-            locals: Default::default(),
-            breakable_stmts: Default::default(),
-            scope_depth: Default::default(),
-            function_type: FunctionType::Script,
-        }
-    }
-}
-
+#[derive(Debug, PartialEq)]
 pub(crate) enum FunctionType {
     Function,
     Script,

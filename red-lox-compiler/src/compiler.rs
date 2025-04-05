@@ -106,12 +106,14 @@ impl<'a> Compiler<'a> {
         }
         let cur_loc = self.parser.current.location.clone();
         self.write(&WriteAction::OpCodeWrite {
+            op_code: OpCode::Nil,
+            args: Arguments::None,
+            location: cur_loc.clone(),
+        })?;
+        self.write(&WriteAction::OpCodeWrite {
             op_code: OpCode::Return,
             args: Arguments::None,
             location: cur_loc,
-        })
-        .map_err(|_| Error::TooManyConstantsError {
-            location: self.parser.current.location.clone(),
         })?;
         Ok(())
     }
@@ -379,7 +381,8 @@ mod tests {
              0006    | OP_PRINT\n\
              0007    | OP_LOOP 0007 -> 0\n\
              0010    | OP_POP\n\
-             0011    | OP_RETURN\n"
+             0011    | OP_NIL\n\
+             0012    | OP_RETURN\n"
         );
         Ok(())
     }
@@ -393,7 +396,8 @@ mod tests {
              0005    | OP_POP\n\
              0006    | OP_CONSTANT 0001 '2'\n\
              0008    | OP_POP\n\
-             0009    | OP_RETURN\n"
+             0009    | OP_NIL\n\
+             0010    | OP_RETURN\n"
         );
         Ok(())
     }
@@ -408,7 +412,8 @@ mod tests {
              0008    | OP_POP\n\
              0009    | OP_CONSTANT 0001 '2'\n\
              0011    | OP_POP\n\
-             0012    | OP_RETURN\n"
+             0012    | OP_NIL\n\
+             0013    | OP_RETURN\n"
         );
         Ok(())
     }

@@ -196,7 +196,14 @@ impl<'a> VirtualMachine<'a> {
                     *self.ip_mut() -= usize::from(jump_size);
                 }
                 OpCode::Return => {
-                    return Ok(());
+                    let result = self.pop()?;
+                    self.frame_count -= 1;
+                    let prev_frame = self.frames[self.frame_count].take().unwrap();
+                    if self.frame_count == 0 {
+                        return Ok(());
+                    }
+                    self.stack_top = prev_frame.slot_start;
+                    self.push(result);
                 }
                 OpCode::Call => {
                     let arg_count = self.read_byte();

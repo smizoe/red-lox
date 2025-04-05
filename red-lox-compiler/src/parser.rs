@@ -1,12 +1,12 @@
-use std::{
-    collections::VecDeque,
-    ops::{Deref, DerefMut},
-};
+use std::collections::VecDeque;
 
 use crate::{
     code_location_registry::LabelType,
     interned_string::{InternedString, InternedStringRegistry},
     op_code::OpCode,
+    parser_guard::{
+        BreakableStatement, BreakableStatementGuard, FunctionDeclarationScope, FunctionEnv, FunctionType, Local, LocalScope, StatementType
+    },
     parsing_rule::*,
     write_action::{Arguments, WriteAction},
 };
@@ -37,140 +37,6 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-struct Local {
-    name: InternedString,
-    depth: i32,
-}
-
-struct LocalScope<'a, 'b> {
-    parser: &'b mut Parser<'a>,
-    left_brace_location: Location,
-}
-
-impl<'a, 'b> LocalScope<'a, 'b> {
-    pub fn new(parser: &'b mut Parser<'a>) -> Self {
-        parser.env.scope_depth += 1;
-        let location = parser.prev.location.clone();
-        Self {
-            parser,
-            left_brace_location: location,
-        }
-    }
-}
-
-impl<'a, 'b> Drop for LocalScope<'a, 'b> {
-    fn drop(&mut self) {
-        self.parser.env.scope_depth -= 1;
-        let location = self.left_brace_location.clone();
-        let upper = self.upper_bound_of_depth(self.scope_depth());
-        for _ in 0..(self.locals().len() - upper) {
-            self.write_pop(location.clone());
-        }
-        self.locals_mut().truncate(upper);
-    }
-}
-
-impl<'a, 'b> Deref for LocalScope<'a, 'b> {
-    type Target = Parser<'a>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.parser
-    }
-}
-
-impl<'a, 'b> DerefMut for LocalScope<'a, 'b> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.parser
-    }
-}
-
-struct FunctionDeclarationScope<'a, 'b> {
-    parser: &'b mut Parser<'a>,
-    prev_env: FunctionEnv,
-}
-
-impl<'a, 'b> FunctionDeclarationScope<'a, 'b> {
-    pub fn new(parser: &'b mut Parser<'a>, fun_name: InternedString, arity: usize) -> Self {
-        parser
-            .pending_writes
-            .push_back(WriteAction::FunctionDeclaration {
-                name: fun_name,
-                arity,
-                location: parser.prev.location.clone(),
-            });
-        let mut env = FunctionEnv::new(FunctionType::Function);
-        std::mem::swap(&mut parser.env, &mut env);
-
-        Self {
-            parser,
-            prev_env: env,
-        }
-    }
-}
-
-impl<'a, 'b> Drop for FunctionDeclarationScope<'a, 'b> {
-    fn drop(&mut self) {
-        let location = self.prev.location.clone();
-        let mut prev_env = std::mem::take(&mut self.prev_env);
-        let is_global = self.scope_depth() == 0;
-        std::mem::swap(&mut self.env, &mut prev_env);
-        self.pending_writes
-            .push_back(WriteAction::FunctionDeclarationEnd {
-                is_global,
-                location,
-            });
-    }
-}
-
-impl<'a, 'b> Deref for FunctionDeclarationScope<'a, 'b> {
-    type Target = Parser<'a>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.parser
-    }
-}
-
-impl<'a, 'b> DerefMut for FunctionDeclarationScope<'a, 'b> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.parser
-    }
-}
-
-struct BreakableStatementGuard<'a, 'b> {
-    parser: &'b mut Parser<'a>,
-}
-
-impl<'a, 'b> BreakableStatementGuard<'a, 'b> {
-    pub fn new(parser: &'b mut Parser<'a>, stmt_type: StatementType, location: Location) -> Self {
-        parser.env.breakable_stmts.push(BreakableStatement {
-            statement_type: stmt_type,
-            location,
-            depth: parser.scope_depth(),
-        });
-        Self { parser }
-    }
-}
-
-impl<'a, 'b> Drop for BreakableStatementGuard<'a, 'b> {
-    fn drop(&mut self) {
-        self.parser.env.breakable_stmts.pop();
-    }
-}
-
-impl<'a, 'b> Deref for BreakableStatementGuard<'a, 'b> {
-    type Target = Parser<'a>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.parser
-    }
-}
-
-impl<'a, 'b> DerefMut for BreakableStatementGuard<'a, 'b> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.parser
-    }
-}
-
 struct BackPatchToken {
     label_type: LabelType,
     location: Location,
@@ -193,57 +59,6 @@ impl BackPatchToken {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-enum StatementType {
-    While,
-    For,
-    Switch,
-}
-
-#[derive(Debug, Clone)]
-struct BreakableStatement {
-    statement_type: StatementType,
-    /// Location used to tag the jump location
-    location: Location,
-    /// The depth of the scope at the statement. The local variables should be popped
-    /// if their depth is greater than this value.
-    depth: i32,
-}
-
-enum FunctionType {
-    Function,
-    Script,
-}
-
-struct FunctionEnv {
-    locals: Vec<Local>,
-    breakable_stmts: Vec<BreakableStatement>,
-    scope_depth: i32,
-    function_type: FunctionType,
-}
-
-impl FunctionEnv {
-    pub fn new(function_type: FunctionType) -> Self {
-        Self {
-            locals: Vec::new(),
-            breakable_stmts: Vec::new(),
-            scope_depth: 0,
-            function_type,
-        }
-    }
-}
-
-impl Default for FunctionEnv {
-    fn default() -> Self {
-        Self {
-            locals: Default::default(),
-            breakable_stmts: Default::default(),
-            scope_depth: Default::default(),
-            function_type: FunctionType::Script,
-        }
-    }
-}
-
 pub(crate) struct Parser<'a> {
     scanner: Scanner<'a>,
     pending_writes: VecDeque<WriteAction>,
@@ -251,7 +66,7 @@ pub(crate) struct Parser<'a> {
     pub(crate) current: TokenWithLocation,
     pub(crate) prev: TokenWithLocation,
     pub(crate) interned_string_registry: InternedStringRegistry,
-    env: FunctionEnv,
+    pub(crate) env: FunctionEnv,
 }
 
 impl<'a> Parser<'a> {
@@ -276,7 +91,11 @@ impl<'a> Parser<'a> {
     }
 
     pub fn scope_depth(&self) -> i32 {
-        self.env.scope_depth
+        self.env.scope_depth()
+    }
+
+    pub(crate) fn append_write(&mut self, write_action: WriteAction) {
+        self.pending_writes.push_back(write_action);
     }
 
     pub fn next_write(&mut self) -> Option<WriteAction> {
@@ -295,11 +114,11 @@ impl<'a> Parser<'a> {
         LocalScope::new(self)
     }
 
-    fn locals(&self) -> &Vec<Local> {
+    pub(crate) fn locals(&self) -> &Vec<Local> {
         &self.env.locals
     }
 
-    fn locals_mut(&mut self) -> &mut Vec<Local> {
+    pub(crate) fn locals_mut(&mut self) -> &mut Vec<Local> {
         &mut self.env.locals
     }
 
@@ -307,7 +126,7 @@ impl<'a> Parser<'a> {
         &self.env.breakable_stmts
     }
 
-    fn upper_bound_of_depth(&self, d: i32) -> usize {
+    pub(crate) fn upper_bound_of_depth(&self, d: i32) -> usize {
         let mut upper = self.locals().len();
         for i in (0..self.locals().len()).rev() {
             if self.locals()[i].depth <= d {
@@ -740,7 +559,7 @@ impl<'a> Parser<'a> {
         });
     }
 
-    fn write_pop(&mut self, location: Location) {
+    pub(crate) fn write_pop(&mut self, location: Location) {
         self.pending_writes.push_back(WriteAction::OpCodeWrite {
             op_code: OpCode::Pop,
             args: Arguments::None,

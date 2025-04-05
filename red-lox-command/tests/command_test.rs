@@ -36,14 +36,12 @@ impl ExpectedOutput {
                     _ => None,
                 };
                 if let Some(v) = to_push {
-                    v.extend(
-                        captures
-                            .get(2)
-                            .unwrap()
-                            .as_str()
-                            .lines()
-                            .map(str::to_string),
-                    );
+                    let s = captures.get(2).unwrap().as_str();
+                    if s.is_empty() {
+                        v.push("".to_string());
+                    } else {
+                        v.extend(s.lines().map(str::to_string));
+                    }
                 }
             }
         }
@@ -90,7 +88,7 @@ fn test_lox_interpreter(
 #[rstest]
 fn test_lox_compiler(
     #[files("../tests/lox/**/*.lox")]
-    #[exclude("(class|conditional|errors|functions|logical_op|ternary_op)")]
+    #[exclude("(class|errors|functions|ternary_op)")]
     path: PathBuf,
 ) {
     use red_lox_command::compiler::run_compiler;

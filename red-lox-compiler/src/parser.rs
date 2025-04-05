@@ -544,7 +544,7 @@ impl<'a> Parser<'a> {
         let skip_else_jump_token = self.emit_jump(
             OpCode::Jump,
             LabelType::EndOfStatement,
-            if_token_location.clone(),
+            self.prev.location.clone(), // '}' of the end of the if stmt
         );
         if_jump_token.patch(&mut self.pending_writes);
         self.write_pop(if_token_location.clone());

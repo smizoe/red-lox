@@ -1,11 +1,11 @@
 var a = 1;
 print true or (a = 2); // out: true
 print a; // out: 1
-print false or (a = 2); // out: true
+print false or (a = 2); // out: 2
 print a; // out: 2
 print false or false; // out: false
 a = 1;
 print false and (a = 2); // out: false
 print a; // out: 1
-print true and 1; // out: true
-print true and nil; // out: false
+print true and 1; // out: 1
+print true and nil; // out: 

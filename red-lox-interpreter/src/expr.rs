@@ -188,7 +188,7 @@ impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Value::*;
         match self {
-            Nil => write!(f, "nil"),
+            Nil => write!(f, ""),
             String(s) => write!(f, "{}", s),
             Number(v) => write!(f, "{}", v),
             Bool(b) => write!(f, "{}", b),
@@ -399,17 +399,20 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                 right,
             } => match operator.token {
                 Token::Or => {
-                    if self.evaluate_expr(left)?.is_truthy() {
-                        Ok(Value::Bool(true))
+                    let left_value = self.evaluate_expr(left)?;
+                    if left_value.is_truthy() {
+                        Ok(left_value)
                     } else {
-                        Ok(Value::Bool(self.evaluate_expr(&right)?.is_truthy()))
+                        let right_value = self.evaluate_expr(&right)?;
+                        Ok(right_value)
                     }
                 }
                 Token::And => {
-                    if !self.evaluate_expr(left)?.is_truthy() {
-                        Ok(Value::Bool(false))
+                    let left_value= self.evaluate_expr(left)?;
+                    if !left_value.is_truthy() {
+                        Ok(left_value)
                     } else {
-                        Ok(Value::Bool(self.evaluate_expr(&right)?.is_truthy()))
+                        Ok(self.evaluate_expr(&right)?)
                     }
                 }
                 _ => unreachable!(),

@@ -25,6 +25,7 @@ pub enum OpCode {
     Jump,
     JumpIfFalse,
     Loop,
+    Call,
     Return,
     Comma,
 }
@@ -35,7 +36,7 @@ impl OpCode {
         use OpCode::*;
         match self {
             JumpIfFalse | Jump | Loop => 3,
-            Constant | GetLocal | SetLocal | DefineGlobal | GetGlobal | SetGlobal => 2,
+            Constant | GetLocal | SetLocal | DefineGlobal | GetGlobal | SetGlobal | Call => 2,
             _ => 1,
         }
     }
@@ -62,6 +63,7 @@ impl Display for OpCode {
             OpCode::Jump => write!(f, "OP_JUMP"),
             OpCode::JumpIfFalse => write!(f, "OP_JUMP_IF_FALSE"),
             OpCode::Loop => write!(f, "OP_LOOP"),
+            OpCode::Call => write!(f, "OP_CALL"),
             OpCode::Return => write!(f, "OP_RETURN"),
             OpCode::Add => write!(f, "OP_ADD"),
             OpCode::Subtract => write!(f, "OP_SUBTRACT"),
@@ -110,6 +112,7 @@ impl TryFrom<u8> for OpCode {
             value if value == JumpIfFalse as u8 => Ok(JumpIfFalse),
             value if value == Jump as u8 => Ok(Jump),
             value if value == Loop as u8 => Ok(Loop),
+            value if value == Call as u8 => Ok(Call),
             _ => Err(ConversionError { from: value }),
         }
     }

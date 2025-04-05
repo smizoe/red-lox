@@ -59,7 +59,7 @@ where
     }
     let mut vm = VirtualMachine::new(result.script, result.interned_string_registry, out);
     if let Err(e) = vm.interpret() {
-        return Err(anyhow!("Failed to interpret the statement: {}", e));
+        return Err(anyhow!("Failed to interpret the statement: {}\nStack trace:\n{}", e, vm.stack_trace()));
     }
     Ok(())
 }

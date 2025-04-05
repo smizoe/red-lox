@@ -10,6 +10,7 @@ pub(crate) enum Arguments {
     String(InternedString),
     Number(f64),
     Offset(u8),
+    ArgCount(u8),
     LabelType(LabelType),
     Function(Rc<LoxFunction>),
 }
@@ -32,6 +33,13 @@ impl Arguments {
     pub fn to_offset(&self) -> Option<u8> {
         match self {
             Arguments::Offset(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    pub fn to_arg_count(&self) -> Option<u8> {
+        match self {
+            Arguments::ArgCount(v) => Some(*v),
             _ => None,
         }
     }

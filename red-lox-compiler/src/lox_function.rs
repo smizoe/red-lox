@@ -4,7 +4,7 @@ use crate::{chunk::Chunk, interned_string::InternedString};
 pub struct LoxFunction {
     pub(crate) name: InternedString,
     pub(crate) arity: usize,
-    pub(crate) chunk: Chunk,
+    chunk: Chunk,
 }
 
 impl LoxFunction {
@@ -18,6 +18,10 @@ impl LoxFunction {
 
     pub fn chunk(&self) -> &Chunk {
         &self.chunk
+    }
+
+    pub fn chunk_mut(&mut self) -> &mut Chunk {
+        &mut self.chunk
     }
 }
 

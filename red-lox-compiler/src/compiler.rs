@@ -66,6 +66,19 @@ fn try_get_interned_string_from(
         })
 }
 
+fn try_get_arg_count_from(
+    op_code: OpCode,
+    args: &Arguments,
+    location: &Location,
+) -> Result<u8, Error> {
+    args.to_arg_count()
+        .ok_or_else(|| Error::UnsupportedArgumentError {
+            op_code,
+            args: args.to_string(),
+            location: location.clone(),
+        })
+}
+
 impl<'a> Compiler<'a> {
     /// Creates a new compiler that compiles the given `text``.
     pub fn new(text: &'a str) -> Self {
@@ -190,6 +203,11 @@ impl<'a> Compiler<'a> {
                 let index = self.add_constant(Value::String(id), location)?;
                 self.current_chunk_mut().add_code(OpCode::SetGlobal.into());
                 self.current_chunk_mut().add_code(index);
+            }
+            OpCode::Call => {
+                self.current_chunk_mut().add_code(OpCode::Call.into());
+                self.current_chunk_mut()
+                    .add_code(try_get_arg_count_from(op_code, args, location)?);
             }
             OpCode::Constant => {
                 let index = match args {
@@ -318,11 +336,11 @@ impl<'a> Compiler<'a> {
     }
 
     fn current_chunk(&self) -> &Chunk {
-        &self.functions.last().unwrap().chunk
+        &self.functions.last().unwrap().chunk()
     }
 
     fn current_chunk_mut(&mut self) -> &mut Chunk {
-        &mut self.functions.last_mut().unwrap().chunk
+        self.functions.last_mut().unwrap().chunk_mut()
     }
 }
 
@@ -345,7 +363,7 @@ mod tests {
         let result = compiler.finish();
         let mut v = Vec::<u8>::new();
         let mut cursor = Cursor::new(&mut v);
-        disassemble_chunk_for_testing(&result.script.chunk, &mut cursor);
+        disassemble_chunk_for_testing(result.script.chunk(), &mut cursor);
         Ok(String::from_utf8(v)
             .map_err(|e| format!("Failed to convert the disassembled code to String {:?}", e))?)
     }

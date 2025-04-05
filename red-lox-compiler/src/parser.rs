@@ -5,7 +5,8 @@ use crate::{
     interned_string::{InternedString, InternedStringRegistry},
     op_code::OpCode,
     parser_guard::{
-        BreakableStatement, BreakableStatementGuard, FunctionDeclarationScope, FunctionEnv, FunctionType, Local, LocalScope, StatementType
+        BreakableStatement, BreakableStatementGuard, FunctionDeclarationScope, FunctionEnv,
+        FunctionType, Local, LocalScope, StatementType,
     },
     parsing_rule::*,
     write_action::{Arguments, WriteAction},
@@ -33,6 +34,8 @@ pub enum Error {
     MisplacedBreakStatementError { location: Location },
     #[error("{location} Can't use a continue statement outside a loop.")]
     MisplacedContinueStatementError { location: Location },
+    #[error("{location} A function can't have more than 255 arguments.")]
+    TooManyFunctionArgumentsError { location: Location },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -712,6 +715,7 @@ impl<'a> Parser<'a> {
             NextExpressionType::Variable => self.variable(can_assign),
             NextExpressionType::And => self.and(),
             NextExpressionType::Or => self.or(),
+            NextExpressionType::Call => self.call(),
         }
     }
 
@@ -785,6 +789,42 @@ impl<'a> Parser<'a> {
         self.parse_precedence(Precedence::Or)?;
         end_jump.patch(&mut self.pending_writes);
         Ok(())
+    }
+
+    fn call(&mut self) -> Result<()> {
+        let call_location = self.prev.location.clone();
+        let arg_count = self.argument_list()?;
+        self.append_write(WriteAction::OpCodeWrite {
+            op_code: OpCode::Call,
+            args: Arguments::ArgCount(arg_count),
+            location: call_location,
+        });
+        Ok(())
+    }
+
+    fn argument_list(&mut self) -> Result<u8> {
+        let mut count = 0;
+        if !self.check(&Token::RightParen) {
+            loop {
+                self.expression()?;
+                if count == u8::MAX {
+                    return Err(Error::TooManyFunctionArgumentsError {
+                        location: self.prev.location.clone(),
+                    });
+                }
+                count += 1;
+                if !self.next_token_is(&Token::Comma)? {
+                    break;
+                }
+            }
+        }
+        self.consume(Token::RightParen, |t| {
+            format!(
+                "{} Expected ')' after function arguments, found {:?}",
+                t.location, t.token
+            )
+        })?;
+        Ok(count)
     }
 
     fn number(&mut self) -> Result<()> {

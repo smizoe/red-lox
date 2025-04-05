@@ -39,7 +39,11 @@ fn disassemble_instruction_internal(
     match chunk.get_code(offset).try_into() {
         Ok(op) => {
             match op {
-                OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal => {
+                OpCode::Constant
+                | OpCode::DefineGlobal
+                | OpCode::GetGlobal
+                | OpCode::SetGlobal
+                | OpCode::Call => {
                     let constant_index = chunk.get_code(offset + 1);
                     writeln!(
                         w,

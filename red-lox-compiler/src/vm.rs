@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Write, rc::Rc};
+use std::{collections::HashMap, fmt::Write, rc::Rc};
 
 use crate::{
     chunk::Chunk,
@@ -17,7 +17,7 @@ pub struct VirtualMachine<'a> {
     stack_top: usize,
     frames: [Option<CallFrame>; FRAMES_MAX],
     frame_count: usize,
-    out: &'a mut dyn Write,
+    out: &'a mut dyn std::io::Write,
     interned_string_registry: InternedStringRegistry,
     globals: HashMap<InternedString, Value>,
 }
@@ -38,6 +38,10 @@ impl CallFrame {
             ip,
             slot_start: slot_index,
         }
+    }
+
+    pub fn last_executed_line(&self) -> usize {
+        self.function.chunk().line_of(self.ip - 1)
     }
 }
 
@@ -66,7 +70,7 @@ impl<'a> VirtualMachine<'a> {
     pub fn new(
         script: LoxFunction,
         interned_string_registry: InternedStringRegistry,
-        out: &'a mut dyn Write,
+        out: &'a mut dyn std::io::Write,
     ) -> Self {
         let mut vm = Self {
             stack: [const { None }; STACK_MAX],
@@ -194,6 +198,42 @@ impl<'a> VirtualMachine<'a> {
                 OpCode::Return => {
                     return Ok(());
                 }
+                OpCode::Call => {
+                    let arg_count = self.read_byte();
+                    let function = match self.peek(arg_count.into())?.clone() {
+                        Value::Function(f) => f,
+                        others => {
+                            return Err(Error::InvalidOperandError {
+                                line: self.line_of(self.ip() - 1),
+                                msg: format!(
+                                    "A value of type {} cannot be called.",
+                                    others.to_type_str()
+                                ),
+                            })
+                        }
+                    };
+                    if function.arity != arg_count.into() {
+                        return Err(Error::InvalidOperandError {
+                            line: self.line_of(self.ip() - 1),
+                            msg: format!(
+                                "Expected {} arguments but got {}",
+                                function.arity, arg_count
+                            ),
+                        });
+                    }
+                    if self.frame_count == FRAMES_MAX {
+                        return Err(Error::InvalidOperandError {
+                            line: self.line_of(self.ip() - 1),
+                            msg: format!("Stack overflow."),
+                        });
+                    }
+                    self.frames[self.frame_count].replace(CallFrame {
+                        function,
+                        ip: 0,
+                        slot_start: self.stack_top - usize::from(arg_count) - 1,
+                    });
+                    self.frame_count += 1;
+                }
                 OpCode::Add => {
                     self.check_binary_plus_operands()?;
                     let b = self.pop()?;
@@ -275,7 +315,7 @@ impl<'a> VirtualMachine<'a> {
     }
 
     fn chunk(&self) -> &Chunk {
-        &self.frame().function.chunk
+        self.frame().function.chunk()
     }
 
     fn ip(&self) -> usize {
@@ -416,5 +456,20 @@ impl<'a> VirtualMachine<'a> {
         self.stack[self.frame().slot_start + index]
             .as_mut()
             .unwrap()
+    }
+
+    pub fn stack_trace(&self) -> String {
+        let mut trace = String::new();
+        for index in (0..self.frame_count).rev() {
+            let frame = self.frames[index].as_ref().unwrap();
+            writeln!(
+                trace,
+                "[line {}] in {}",
+                frame.last_executed_line(),
+                frame.function
+            )
+            .unwrap();
+        }
+        trace
     }
 }

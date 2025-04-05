@@ -1,6 +1,5 @@
 use red_lox_ast::scanner::Token;
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Precedence {
     None = 0,
@@ -51,8 +50,8 @@ pub(crate) enum NextExpressionType {
     Variable,
     And,
     Or,
+    Call,
 }
-
 
 #[derive(Debug, Clone)]
 pub(crate) struct Rule {
@@ -75,9 +74,9 @@ pub(crate) fn get_rule(token: &Token) -> Rule {
     use NextExpressionType::*;
     match token {
         Token::LeftParen => Rule {
-            precedence: Precedence::None,
+            precedence: Precedence::Call,
             prefix: Grouping,
-            infix: None,
+            infix: Call,
         },
         Token::RightParen => Rule::default(),
         Token::LeftBrace => Rule::default(),

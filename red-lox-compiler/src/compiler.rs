@@ -155,11 +155,15 @@ impl<'a> Compiler<'a> {
                 let name = defined.name.clone();
                 self.write_op_code(
                     OpCode::Constant,
-                    &Arguments::Function(Rc::new(defined)),
+                    &Arguments::Value(crate::value::Value::Function(Rc::new(defined))),
                     location,
                 )?;
                 if *is_global {
-                    self.write_op_code(OpCode::DefineGlobal, &Arguments::String(name), location)?;
+                    self.write_op_code(
+                        OpCode::DefineGlobal,
+                        &Arguments::Value(crate::value::Value::String(name)),
+                        location,
+                    )?;
                 }
                 Ok(())
             }
@@ -211,11 +215,7 @@ impl<'a> Compiler<'a> {
             }
             OpCode::Constant => {
                 let index = match args {
-                    Arguments::Number(v) => self.add_constant(Value::Number(*v), location),
-                    Arguments::String(s) => self.add_constant(Value::String(s.clone()), location),
-                    Arguments::Function(f) => {
-                        self.add_constant(Value::Function(f.clone()), location)
-                    }
+                    Arguments::Value(v) => self.add_constant(v.clone(), location),
                     _ => Err(Error::UnsupportedArgumentError {
                         op_code,
                         args: args.to_string(),

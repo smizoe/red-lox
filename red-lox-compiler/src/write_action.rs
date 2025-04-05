@@ -1,18 +1,14 @@
-use std::rc::Rc;
-
 use red_lox_ast::scanner::Location;
 
-use crate::{code_location_registry::LabelType, interned_string::InternedString, lox_function::LoxFunction, op_code::OpCode};
+use crate::{code_location_registry::LabelType, interned_string::InternedString, op_code::OpCode};
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Arguments {
     None,
-    String(InternedString),
-    Number(f64),
+    Value(crate::value::Value),
     Offset(u8),
     ArgCount(u8),
     LabelType(LabelType),
-    Function(Rc<LoxFunction>),
 }
 
 impl std::fmt::Display for Arguments {
@@ -25,7 +21,7 @@ impl Arguments {
     pub fn to_interned_string(&self) -> Option<InternedString> {
         use Arguments::*;
         match self {
-            String(s) => Some(s.clone()),
+            Value(crate::value::Value::String(s)) => Some(s.clone()),
             _ => Option::None,
         }
     }

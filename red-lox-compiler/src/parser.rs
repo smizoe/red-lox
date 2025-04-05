@@ -323,7 +323,7 @@ impl<'a> Parser<'a> {
         if self.scope_depth() == 0 {
             writes.push(WriteAction::OpCodeWrite {
                 op_code: OpCode::DefineGlobal,
-                args: Arguments::String(name),
+                args: Arguments::Value(crate::value::Value::String(name)),
                 location: ident.location.clone(),
             });
         } else {
@@ -726,7 +726,11 @@ impl<'a> Parser<'a> {
 
         let (set_op, get_op, args) = match self.resolve_local(id.as_ref(), &self.prev.location)? {
             Some(v) => (OpCode::SetLocal, OpCode::GetLocal, Arguments::Offset(v)),
-            None => (OpCode::SetGlobal, OpCode::GetGlobal, Arguments::String(id)),
+            None => (
+                OpCode::SetGlobal,
+                OpCode::GetGlobal,
+                Arguments::Value(crate::value::Value::String(id)),
+            ),
         };
         let instruction = if can_assign && self.next_token_is(&Token::Equal)? {
             self.assignment()?;
@@ -834,7 +838,7 @@ impl<'a> Parser<'a> {
         };
         self.pending_writes.push_back(WriteAction::OpCodeWrite {
             op_code: OpCode::Constant,
-            args: Arguments::Number(v),
+            args: Arguments::Value(crate::value::Value::Number(v)),
             location: self.prev.location.clone(),
         });
         Ok(())
@@ -848,7 +852,7 @@ impl<'a> Parser<'a> {
         let v = self.interned_string_registry.intern_string(s);
         self.pending_writes.push_back(WriteAction::OpCodeWrite {
             op_code: OpCode::Constant,
-            args: Arguments::String(v),
+            args: Arguments::Value(crate::value::Value::String(v)),
             location: self.prev.location.clone(),
         });
         Ok(())

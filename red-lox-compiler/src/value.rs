@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use crate::interned_string::InternedString;
 use crate::lox_function::LoxFunction;
+use crate::native_function::NativeFunction;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Value {
@@ -11,6 +12,7 @@ pub(crate) enum Value {
     Number(f64),
     String(InternedString),
     Function(Rc<LoxFunction>),
+    NativeFunction(Rc<NativeFunction>),
 }
 
 impl Display for Value {
@@ -27,6 +29,7 @@ impl Display for Value {
                     write!(f, "<fn {}>", fun.name)
                 }
             }
+            Value::NativeFunction(_) => write!(f, "<native fn>"),
         }
     }
 }
@@ -81,6 +84,7 @@ impl Value {
             Number(_) => "number",
             String(_) => "string",
             Function(_) => "function",
+            NativeFunction(_) => "native function"
         }
     }
 }

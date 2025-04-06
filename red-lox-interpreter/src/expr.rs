@@ -313,6 +313,8 @@ pub enum Error {
     },
     #[error("{location} Undefined property {name} is accessed.")]
     UnknowPropertyAccessError { name: String, location: Location },
+    #[error("An error occurred while calling a native function: {msg}")]
+    NativeFunctionCallError { msg: String },
 }
 
 fn handle_binary_op(
@@ -408,7 +410,7 @@ impl<'a, 'b> Interpreter<'a, 'b> {
                     }
                 }
                 Token::And => {
-                    let left_value= self.evaluate_expr(left)?;
+                    let left_value = self.evaluate_expr(left)?;
                     if !left_value.is_truthy() {
                         Ok(left_value)
                     } else {

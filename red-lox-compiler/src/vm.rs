@@ -5,6 +5,7 @@ use crate::{
     debug::disassemble_instruction,
     interned_string::{InternedString, InternedStringRegistry},
     lox_function::LoxFunction,
+    native_function::{self, register_native_functions, NativeFunction},
     op_code::OpCode,
     value::Value,
 };
@@ -64,6 +65,14 @@ pub enum Error {
         "[At line {line}] runtime error: variable '{var_name}' was accessed before it is defined."
     )]
     UndefinedVariableError { line: usize, var_name: String },
+    #[error(
+        "[At line {line}] a runtime error occurred while executing native function {name}: {error}"
+    )]
+    NativeFunctionCallError {
+        line: usize,
+        name: InternedString,
+        error: native_function::Error,
+    },
 }
 
 impl<'a> VirtualMachine<'a> {
@@ -84,6 +93,7 @@ impl<'a> VirtualMachine<'a> {
         let fun = Rc::new(script);
         vm.frames[0].replace(CallFrame::new(fun.clone(), 0, 0));
         vm.push(Value::Function(fun));
+        register_native_functions(&mut vm.globals, &mut vm.interned_string_registry);
         vm
     }
 
@@ -209,8 +219,11 @@ impl<'a> VirtualMachine<'a> {
                 }
                 OpCode::Call => {
                     let arg_count = self.read_byte();
-                    let function = match self.peek(arg_count.into())?.clone() {
-                        Value::Function(f) => f,
+                    match self.peek(arg_count.into())?.clone() {
+                        Value::Function(f) => self.handle_lox_function_call(f, arg_count)?,
+                        Value::NativeFunction(nf) => {
+                            self.handle_native_function_call(nf, arg_count)?
+                        }
                         others => {
                             return Err(Error::InvalidOperandError {
                                 line: self.line_of(self.ip() - 1),
@@ -221,27 +234,6 @@ impl<'a> VirtualMachine<'a> {
                             })
                         }
                     };
-                    if function.arity != arg_count.into() {
-                        return Err(Error::InvalidOperandError {
-                            line: self.line_of(self.ip() - 1),
-                            msg: format!(
-                                "Expected {} arguments but got {}",
-                                function.arity, arg_count
-                            ),
-                        });
-                    }
-                    if self.frame_count == FRAMES_MAX {
-                        return Err(Error::InvalidOperandError {
-                            line: self.line_of(self.ip() - 1),
-                            msg: format!("Stack overflow."),
-                        });
-                    }
-                    self.frames[self.frame_count].replace(CallFrame {
-                        function,
-                        ip: 0,
-                        slot_start: self.stack_top - usize::from(arg_count) - 1,
-                    });
-                    self.frame_count += 1;
                 }
                 OpCode::Add => {
                     self.check_binary_plus_operands()?;
@@ -313,6 +305,53 @@ impl<'a> VirtualMachine<'a> {
                 }
             }
         }
+    }
+
+    fn handle_lox_function_call(
+        &mut self,
+        function: Rc<LoxFunction>,
+        arg_count: u8,
+    ) -> Result<(), Error> {
+        if function.arity != arg_count.into() {
+            return Err(Error::InvalidOperandError {
+                line: self.line_of(self.ip() - 1),
+                msg: format!(
+                    "Expected {} arguments but got {}",
+                    function.arity, arg_count
+                ),
+            });
+        }
+        if self.frame_count == FRAMES_MAX {
+            return Err(Error::InvalidOperandError {
+                line: self.line_of(self.ip() - 1),
+                msg: format!("Stack overflow."),
+            });
+        }
+        self.frames[self.frame_count].replace(CallFrame {
+            function,
+            ip: 0,
+            slot_start: self.stack_top - usize::from(arg_count) - 1,
+        });
+        self.frame_count += 1;
+        Ok(())
+    }
+    fn handle_native_function_call(
+        &mut self,
+        nf: Rc<NativeFunction>,
+        arg_count: u8,
+    ) -> Result<(), Error> {
+        let args = self.stack[(self.stack_top - usize::from(arg_count))..self.stack_top]
+            .iter()
+            .map(|v| v.clone().unwrap())
+            .collect::<Vec<Value>>();
+        let result = nf.call(args).map_err(|e| Error::NativeFunctionCallError {
+            line: self.line_of(self.ip() - 1),
+            name: nf.name(),
+            error: e,
+        })?;
+        self.stack_top -= usize::from(arg_count) + 1;
+        self.push(result);
+        Ok(())
     }
 
     fn frame(&self) -> &CallFrame {
@@ -447,6 +486,7 @@ impl<'a> VirtualMachine<'a> {
                 Number(v) => println!("[{:^7.3}]", v),
                 String(s) => println!("[{:^7}]", s),
                 Function(f) => println!("[{:^7}]", f),
+                nf @ NativeFunction(_) => println!("[{:^7}]", nf),
             }
         }
     }

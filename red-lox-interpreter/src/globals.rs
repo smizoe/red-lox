@@ -17,11 +17,10 @@ pub fn register_globals(environment: &mut Environment) {
 }
 
 fn clock(_: Vec<Value>) -> Result<Value, Error> {
-    Ok(Value::Number(
-        SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_secs_f32()
-            .into(),
-    ))
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map(|duration| Value::Number(duration.as_secs_f64()))
+        .map_err(|e| Error::NativeFunctionCallError {
+            msg: format!("Falied to get time: {}", e),
+        })
 }

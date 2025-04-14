@@ -1,4 +1,4 @@
-use crate::value::Value;
+use crate::common::value::Value;
 
 #[derive(Clone, PartialEq)]
 pub struct Chunk {

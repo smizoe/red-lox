@@ -1,4 +1,4 @@
-use crate::{chunk::Chunk, interned_string::InternedString};
+use crate::{common::chunk::Chunk, common::InternedString};
 
 #[derive(Clone)]
 pub struct LoxFunction {

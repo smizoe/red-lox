@@ -1,12 +1,7 @@
 use red_lox_ast::scanner::Location;
 use std::ops::{Deref, DerefMut};
 
-use crate::{interned_string::InternedString, parser::Parser};
-
-pub(crate) struct Local {
-    pub(crate) name: InternedString,
-    pub(crate) depth: i32,
-}
+use crate::parser::Parser;
 
 pub(crate) struct LocalScope<'a, 'b> {
     parser: &'b mut Parser<'a>,

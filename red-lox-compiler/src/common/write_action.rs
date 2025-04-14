@@ -1,11 +1,15 @@
 use red_lox_ast::scanner::Location;
 
-use crate::{code_location_registry::LabelType, interned_string::InternedString, op_code::OpCode};
+use crate::{
+    common::code_location_registry::LabelType, common::op_code::OpCode, common::InternedString,
+};
+
+use super::variable_location::UpValue;
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Arguments {
     None,
-    Value(crate::value::Value),
+    Value(crate::common::value::Value),
     Offset(u8),
     ArgCount(u8),
     LabelType(LabelType),
@@ -21,7 +25,7 @@ impl Arguments {
     pub fn to_interned_string(&self) -> Option<InternedString> {
         use Arguments::*;
         match self {
-            Value(crate::value::Value::String(s)) => Some(s.clone()),
+            Value(crate::common::value::Value::String(s)) => Some(s.clone()),
             _ => Option::None,
         }
     }
@@ -73,6 +77,7 @@ pub(crate) enum WriteAction {
     },
     FunctionDeclarationEnd {
         is_global: bool,
+        upvalues: Vec<UpValue>,
         location: Location,
     },
 }

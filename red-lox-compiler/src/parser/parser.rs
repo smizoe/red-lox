@@ -1,46 +1,16 @@
 use std::collections::VecDeque;
 
 use crate::{
-    code_location_registry::LabelType,
-    interned_string::{InternedString, InternedStringRegistry},
-    op_code::OpCode,
-    parser_guard::{
+    common::{code_location_registry::LabelType, op_code::OpCode, variable_location::Local, write_action::{Arguments, WriteAction}, InternedString, InternedStringRegistry},
+    parser::{guard::{
         BreakableStatement, BreakableStatementGuard, FunctionDeclarationScope, FunctionEnv,
-        FunctionType, Local, LocalScope, StatementType,
-    },
-    parsing_rule::*,
-    write_action::{Arguments, WriteAction},
+        FunctionType, LocalScope, StatementType,
+    }, Error, Result},
 };
 
-use red_lox_ast::scanner::{
-    Location, Scanner, Token, TokenWithLocation, TokenizationError, IDENTIFIER_TOKEN,
-};
+use red_lox_ast::scanner::{Location, Scanner, Token, TokenWithLocation, IDENTIFIER_TOKEN};
 
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("An error occurred while parsing the code: {}", .0)]
-    TokenizationError(TokenizationError),
-    #[error("{}", .0)]
-    UnexpectedTokenError(String),
-    #[error("{location} The lhs of assignment is invalid.")]
-    InvalidAssignmentError { location: Location },
-    #[error("{location} Too many local variables in the current scope.")]
-    TooManyLocalVariablesError { location: Location },
-    #[error("{location} Variable '{name}' is already defined in the current scope.")]
-    DuplicateVariableDeclarationError { location: Location, name: String },
-    #[error("{location} Can't read local variable '{name}' in its own initializer.")]
-    UninititalizedVariableAccessError { location: Location, name: String },
-    #[error("{location} Can't use a break statement outside a loop or a switch statement.")]
-    MisplacedBreakStatementError { location: Location },
-    #[error("{location} Can't use a continue statement outside a loop.")]
-    MisplacedContinueStatementError { location: Location },
-    #[error("{location} A function can't have more than 255 arguments.")]
-    TooManyFunctionArgumentsError { location: Location },
-    #[error("{location} Cannot return from the top-level code.")]
-    ReturnFromTopLevelError { location: Location },
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
+use super::parsing_rule::*;
 
 struct BackPatchToken {
     label_type: LabelType,
@@ -71,7 +41,7 @@ pub(crate) struct Parser<'a> {
     pub(crate) current: TokenWithLocation,
     pub(crate) prev: TokenWithLocation,
     pub(crate) interned_string_registry: InternedStringRegistry,
-    pub(crate) env: FunctionEnv,
+    pub(in crate::parser) env: Box<FunctionEnv>,
 }
 
 impl<'a> Parser<'a> {
@@ -89,7 +59,10 @@ impl<'a> Parser<'a> {
                 location: Location::default(),
             },
             interned_string_registry: InternedStringRegistry::new(),
-            env: FunctionEnv::new(InternedString::get_empty_string(),FunctionType::Script),
+            env: Box::new(FunctionEnv::new(
+                InternedString::get_empty_string(),
+                FunctionType::Script,
+            )),
         };
         parser.advance().expect("No token available in Scanner.");
         parser
@@ -119,11 +92,11 @@ impl<'a> Parser<'a> {
         LocalScope::new(self)
     }
 
-    pub(crate) fn locals(&self) -> &Vec<Local> {
+    pub(in crate::parser) fn locals(&self) -> &Vec<Local> {
         &self.env.locals
     }
 
-    pub(crate) fn locals_mut(&mut self) -> &mut Vec<Local> {
+    pub(in crate::parser) fn locals_mut(&mut self) -> &mut Vec<Local> {
         &mut self.env.locals
     }
 
@@ -325,7 +298,7 @@ impl<'a> Parser<'a> {
         if self.scope_depth() == 0 {
             writes.push(WriteAction::OpCodeWrite {
                 op_code: OpCode::DefineGlobal,
-                args: Arguments::Value(crate::value::Value::String(name)),
+                args: Arguments::Value(crate::common::value::Value::String(name)),
                 location: ident.location.clone(),
             });
         } else {
@@ -342,17 +315,14 @@ impl<'a> Parser<'a> {
             });
         }
 
-        self.locals_mut().push(Local {
-            name: name.clone(),
-            depth: -1,
-        });
+        self.locals_mut().push(Local::new(name.clone(), -1));
 
         for local in self.locals().iter().rev() {
             if local.depth < self.scope_depth() {
                 break;
             }
 
-            if local.name == name {
+            if local.name() == name.as_ref() {
                 return Err(Error::DuplicateVariableDeclarationError {
                     location: ident_location.clone(),
                     name: name.to_string(),
@@ -364,19 +334,11 @@ impl<'a> Parser<'a> {
     }
 
     fn resolve_local(&self, name: &str, location: &Location) -> Result<Option<u8>> {
-        for i in (0..self.locals().len()).rev() {
-            let local = &self.locals()[i];
-            if local.depth == -1 {
-                return Err(Error::UninititalizedVariableAccessError {
-                    location: location.clone(),
-                    name: name.to_string(),
-                });
-            }
-            if local.name.as_ref() == name {
-                return Ok(Some(u8::try_from(i).unwrap()));
-            }
-        }
-        Ok(None)
+        self.env.resolve_local(name, location)
+    }
+
+    fn resolve_upvalue(&mut self, name: &str, location: &Location) -> Result<Option<u8>> {
+        self.env.resolve_upvalue(name, location)
     }
 
     fn statement(&mut self) -> Result<()> {
@@ -755,18 +717,23 @@ impl<'a> Parser<'a> {
     }
 
     fn variable(&mut self, can_assign: bool) -> Result<()> {
+        let var_location = self.prev.location.clone();
         let id = self
             .interned_string_registry
             .intern_string(self.prev.token.id_name());
 
-        let (set_op, get_op, args) = match self.resolve_local(id.as_ref(), &self.prev.location)? {
-            Some(v) => (OpCode::SetLocal, OpCode::GetLocal, Arguments::Offset(v)),
-            None => (
-                OpCode::SetGlobal,
-                OpCode::GetGlobal,
-                Arguments::Value(crate::value::Value::String(id)),
-            ),
-        };
+        let (set_op, get_op, args) =
+            if let Some(v) = self.resolve_local(id.as_ref(), &var_location)? {
+                (OpCode::SetLocal, OpCode::GetLocal, Arguments::Offset(v))
+            } else if let Some(v) = self.resolve_upvalue(id.as_ref(), &var_location)? {
+                (OpCode::SetUpValue, OpCode::GetUpValue, Arguments::Offset(v))
+            } else {
+                (
+                    OpCode::SetGlobal,
+                    OpCode::GetGlobal,
+                    Arguments::Value(crate::common::value::Value::String(id)),
+                )
+            };
         let instruction = if can_assign && self.next_token_is(&Token::Equal)? {
             self.assignment()?;
             WriteAction::OpCodeWrite {
@@ -874,7 +841,7 @@ impl<'a> Parser<'a> {
         };
         self.pending_writes.push_back(WriteAction::OpCodeWrite {
             op_code: OpCode::Constant,
-            args: Arguments::Value(crate::value::Value::Number(v)),
+            args: Arguments::Value(crate::common::value::Value::Number(v)),
             location: self.prev.location.clone(),
         });
         Ok(())
@@ -888,7 +855,7 @@ impl<'a> Parser<'a> {
         let v = self.interned_string_registry.intern_string(s);
         self.pending_writes.push_back(WriteAction::OpCodeWrite {
             op_code: OpCode::Constant,
-            args: Arguments::Value(crate::value::Value::String(v)),
+            args: Arguments::Value(crate::common::value::Value::String(v)),
             location: self.prev.location.clone(),
         });
         Ok(())

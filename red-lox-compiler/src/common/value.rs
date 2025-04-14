@@ -1,9 +1,9 @@
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 
-use crate::interned_string::InternedString;
-use crate::lox_function::LoxFunction;
-use crate::native_function::NativeFunction;
+use crate::common::function::Closure;
+use crate::common::function::NativeFunction;
+use crate::common::InternedString;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Value {
@@ -11,7 +11,7 @@ pub(crate) enum Value {
     Bool(bool),
     Number(f64),
     String(InternedString),
-    Function(Rc<LoxFunction>),
+    Closure(Rc<Closure>),
     NativeFunction(Rc<NativeFunction>),
 }
 
@@ -22,13 +22,7 @@ impl Display for Value {
             Value::Bool(b) => write!(f, "{}", b),
             Value::Number(v) => write!(f, "{}", v),
             Value::String(s) => write!(f, "{}", s),
-            Value::Function(fun) => {
-                if fun.name.as_ref().is_empty() {
-                    write!(f, "<script>")
-                } else {
-                    write!(f, "<fn {}>", fun.name)
-                }
-            }
+            Value::Closure(c) => write!(f, "{}", c.fun()),
             Value::NativeFunction(_) => write!(f, "<native fn>"),
         }
     }
@@ -83,8 +77,8 @@ impl Value {
             Bool(_) => "boolean",
             Number(_) => "number",
             String(_) => "string",
-            Function(_) => "function",
-            NativeFunction(_) => "native function"
+            Closure(_) => "closure",
+            NativeFunction(_) => "native function",
         }
     }
 }

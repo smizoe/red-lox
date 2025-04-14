@@ -9,9 +9,12 @@ pub enum OpCode {
     Pop,
     GetLocal,
     SetLocal,
+    GetUpValue,
+    SetUpValue,
     GetGlobal,
     DefineGlobal,
     SetGlobal,
+    Closure,
     Equal,
     Greater,
     Less,
@@ -30,18 +33,6 @@ pub enum OpCode {
     Comma,
 }
 
-impl OpCode {
-    // Returns the number of bytes (u8) that a single op uses.
-    pub fn len(&self) -> usize {
-        use OpCode::*;
-        match self {
-            JumpIfFalse | Jump | Loop => 3,
-            Constant | GetLocal | SetLocal | DefineGlobal | GetGlobal | SetGlobal | Call => 2,
-            _ => 1,
-        }
-    }
-}
-
 impl Display for OpCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -52,9 +43,12 @@ impl Display for OpCode {
             OpCode::Pop => write!(f, "OP_POP"),
             OpCode::GetLocal => write!(f, "OP_GET_LOCAL"),
             OpCode::SetLocal => write!(f, "OP_SET_LOCAL"),
+            OpCode::GetUpValue => write!(f, "OP_GET_UPVALUE"),
+            OpCode::SetUpValue => write!(f, "OP_SET_UPVALUE"),
             OpCode::GetGlobal => write!(f, "OP_GET_GLOBAL"),
             OpCode::DefineGlobal => write!(f, "OP_DEFINE_GLOBAL"),
             OpCode::SetGlobal => write!(f, "OP_SET_GLOBAL"),
+            OpCode::Closure => write!(f, "OP_CLOSURE"),
             OpCode::Equal => write!(f, "OP_EQUAL"),
             OpCode::Greater => write!(f, "OP_GREATER"),
             OpCode::Less => write!(f, "OP_LESS"),

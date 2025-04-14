@@ -1,8 +1,8 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc, time::SystemTime};
 
 use crate::{
-    interned_string::{InternedString, InternedStringRegistry},
-    value::Value,
+    common::{InternedString, InternedStringRegistry},
+    common::value::Value,
 };
 
 #[derive(Debug, thiserror::Error)]

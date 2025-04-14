@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use red_lox_ast::scanner::Location;
 
-use crate::op_code::OpCode;
+use crate::common::op_code::OpCode;
 
 /// A registry struct to keep track of the code locations.
 /// The use cases are as below:

@@ -1,13 +1,13 @@
 use std::{collections::HashMap, fmt::Write, rc::Rc};
 
 use crate::{
-    chunk::Chunk,
-    debug::disassemble_instruction,
-    interned_string::{InternedString, InternedStringRegistry},
-    lox_function::LoxFunction,
-    native_function::{self, register_native_functions, NativeFunction},
-    op_code::OpCode,
-    value::Value,
+    common::chunk::debug::disassemble_instruction,
+    common::chunk::Chunk,
+    common::function::Closure,
+    common::function::{register_native_functions, NativeFunction},
+    common::op_code::OpCode,
+    common::value::Value,
+    common::{InternedString, InternedStringRegistry},
 };
 
 const FRAMES_MAX: usize = 64;
@@ -24,8 +24,8 @@ pub struct VirtualMachine<'a> {
 }
 
 struct CallFrame {
-    // The function associated with the current frame.
-    pub function: Rc<LoxFunction>,
+    // The closure associated with the current frame.
+    pub closure: Rc<Closure>,
     // The instruction pointer/index for the current frame.
     pub ip: usize,
     // The bottom (the index into the 0-th byte in the stack) of the current frame.
@@ -33,16 +33,16 @@ struct CallFrame {
 }
 
 impl CallFrame {
-    pub fn new(function: Rc<LoxFunction>, ip: usize, slot_index: usize) -> Self {
+    pub fn new(closure: Rc<Closure>, ip: usize, slot_index: usize) -> Self {
         Self {
-            function,
+            closure,
             ip,
             slot_start: slot_index,
         }
     }
 
     pub fn last_executed_line(&self) -> usize {
-        self.function.chunk().line_of(self.ip - 1)
+        self.closure.fun().chunk().line_of(self.ip - 1)
     }
 }
 
@@ -53,7 +53,7 @@ pub enum Error {
     #[error("[At line {line}] runtime conversion error: {error}")]
     OperationConversionError {
         line: usize,
-        error: crate::op_code::ConversionError,
+        error: crate::common::op_code::ConversionError,
     },
     #[error("[At line {line}] runtime operation error: {msg}")]
     InvalidOperandError { line: usize, msg: String },
@@ -71,13 +71,13 @@ pub enum Error {
     NativeFunctionCallError {
         line: usize,
         name: InternedString,
-        error: native_function::Error,
+        error: crate::common::function::Error,
     },
 }
 
 impl<'a> VirtualMachine<'a> {
     pub fn new(
-        script: LoxFunction,
+        script: Closure,
         interned_string_registry: InternedStringRegistry,
         out: &'a mut dyn std::io::Write,
     ) -> Self {
@@ -92,7 +92,7 @@ impl<'a> VirtualMachine<'a> {
         };
         let fun = Rc::new(script);
         vm.frames[0].replace(CallFrame::new(fun.clone(), 0, 0));
-        vm.push(Value::Function(fun));
+        vm.push(Value::Closure(fun));
         register_native_functions(&mut vm.globals, &mut vm.interned_string_registry);
         vm
     }
@@ -133,6 +133,8 @@ impl<'a> VirtualMachine<'a> {
                     let index = self.read_byte();
                     *self.slot_mut(index.into()) = self.peek(0)?.clone();
                 }
+                OpCode::GetUpValue => todo!(),
+                OpCode::SetUpValue => todo!(),
                 OpCode::GetGlobal => match self.get_constant() {
                     Value::String(s) => {
                         let v =
@@ -168,6 +170,10 @@ impl<'a> VirtualMachine<'a> {
                     }
                     _ => unreachable!(),
                 },
+                OpCode::Closure => {
+                    let closure = self.get_constant();
+                    self.push(closure);
+                }
                 OpCode::Equal => {
                     let b = self.pop()?;
                     let a = self.pop()?;
@@ -220,7 +226,7 @@ impl<'a> VirtualMachine<'a> {
                 OpCode::Call => {
                     let arg_count = self.read_byte();
                     match self.peek(arg_count.into())?.clone() {
-                        Value::Function(f) => self.handle_lox_function_call(f, arg_count)?,
+                        Value::Closure(f) => self.handle_lox_function_call(f, arg_count)?,
                         Value::NativeFunction(nf) => {
                             self.handle_native_function_call(nf, arg_count)?
                         }
@@ -309,15 +315,16 @@ impl<'a> VirtualMachine<'a> {
 
     fn handle_lox_function_call(
         &mut self,
-        function: Rc<LoxFunction>,
+        closure: Rc<Closure>,
         arg_count: u8,
     ) -> Result<(), Error> {
-        if function.arity != arg_count.into() {
+        if closure.fun().arity != arg_count.into() {
             return Err(Error::InvalidOperandError {
                 line: self.line_of(self.ip() - 1),
                 msg: format!(
                     "Expected {} arguments but got {}",
-                    function.arity, arg_count
+                    closure.fun().arity,
+                    arg_count
                 ),
             });
         }
@@ -328,7 +335,7 @@ impl<'a> VirtualMachine<'a> {
             });
         }
         self.frames[self.frame_count].replace(CallFrame {
-            function,
+            closure,
             ip: 0,
             slot_start: self.stack_top - usize::from(arg_count) - 1,
         });
@@ -363,7 +370,7 @@ impl<'a> VirtualMachine<'a> {
     }
 
     fn chunk(&self) -> &Chunk {
-        self.frame().function.chunk()
+        self.frame().closure.fun().chunk()
     }
 
     fn ip(&self) -> usize {
@@ -485,7 +492,7 @@ impl<'a> VirtualMachine<'a> {
                 Bool(b) => println!("[{:^7}]", b),
                 Number(v) => println!("[{:^7.3}]", v),
                 String(s) => println!("[{:^7}]", s),
-                Function(f) => println!("[{:^7}]", f),
+                Closure(f) => println!("[{:^7}]", f.fun()),
                 nf @ NativeFunction(_) => println!("[{:^7}]", nf),
             }
         }
@@ -515,7 +522,7 @@ impl<'a> VirtualMachine<'a> {
                 trace,
                 "[line {}] in {}",
                 frame.last_executed_line(),
-                frame.function
+                frame.closure.fun()
             )
             .unwrap();
         }

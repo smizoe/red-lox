@@ -3,23 +3,25 @@ use std::rc::Rc;
 use red_lox_ast::scanner::{Location, Scanner};
 
 use crate::{
-    chunk::Chunk,
-    code_location_registry::{BackPatchLocationKey, CodeLocationRegistry, LabelKey, LabelType},
-    interned_string::{InternedString, InternedStringRegistry},
-    lox_function::LoxFunction,
-    op_code::OpCode,
+    common::{
+        chunk::Chunk,
+        code_location_registry::{BackPatchLocationKey, CodeLocationRegistry, LabelKey, LabelType},
+        function::{Closure, LoxFunction},
+        op_code::OpCode,
+        value::Value,
+        write_action::{Arguments, WriteAction},
+        InternedString, InternedStringRegistry,
+    },
     parser::Parser,
-    value::Value,
-    write_action::{Arguments, WriteAction},
 };
 
 pub struct CompilationResult {
-    pub script: LoxFunction,
+    pub script: Closure,
     pub interned_string_registry: InternedStringRegistry,
 }
 
 pub struct Compiler<'a> {
-    functions: Vec<LoxFunction>,
+    function: Vec<LoxFunction>,
     parser: Parser<'a>,
     code_location_registry: CodeLocationRegistry,
 }
@@ -83,7 +85,7 @@ impl<'a> Compiler<'a> {
     /// Creates a new compiler that compiles the given `text``.
     pub fn new(text: &'a str) -> Self {
         Self {
-            functions: vec![LoxFunction::new(InternedString::get_empty_string(), 0)],
+            function: vec![LoxFunction::new(InternedString::get_empty_string(), 0)],
             parser: Parser::new(Scanner::new(text)),
             code_location_registry: CodeLocationRegistry::new(),
         }
@@ -94,10 +96,9 @@ impl<'a> Compiler<'a> {
     /// An error value is returned when there is any error encountered during the compilation.
     pub fn compile(&mut self) -> Result<(), Error> {
         while let Some(write_action) = self.parser.next_write() {
-            self.write(&write_action)
-                .map_err(|_| Error::TooManyConstantsError {
-                    location: write_action.get_location().clone(),
-                })?;
+            let location = write_action.get_location().clone();
+            self.write(write_action)
+                .map_err(move |_| Error::TooManyConstantsError { location })?;
         }
         if !self.parser.errors.is_empty() {
             return Err(Error::CompilationError(std::mem::take(
@@ -105,12 +106,12 @@ impl<'a> Compiler<'a> {
             )));
         }
         let cur_loc = self.parser.current.location.clone();
-        self.write(&WriteAction::OpCodeWrite {
+        self.write(WriteAction::OpCodeWrite {
             op_code: OpCode::Nil,
             args: Arguments::None,
             location: cur_loc.clone(),
         })?;
-        self.write(&WriteAction::OpCodeWrite {
+        self.write(WriteAction::OpCodeWrite {
             op_code: OpCode::Return,
             args: Arguments::None,
             location: cur_loc,
@@ -120,55 +121,58 @@ impl<'a> Compiler<'a> {
 
     pub fn finish(mut self) -> CompilationResult {
         CompilationResult {
-            script: self.functions.pop().unwrap(),
+            script: Closure::new(self.function.pop().unwrap(), Vec::new()),
             interned_string_registry: self.parser.interned_string_registry,
         }
     }
 
     /// Handles a single `WriteAction`.
     /// See each function called internally for what occurs when each variant of the enum arrives.
-    fn write(&mut self, write_action: &WriteAction) -> Result<(), Error> {
+    fn write(&mut self, write_action: WriteAction) -> Result<(), Error> {
         match write_action {
             WriteAction::OpCodeWrite {
                 op_code,
                 args,
                 location,
-            } => self.write_op_code(*op_code, args, location),
+            } => self.write_op_code(op_code, args, location),
             WriteAction::BackPatchJumpLocation {
                 label_type: usage,
                 location,
-            } => self.back_patch_jump_location(*usage, location.clone()),
+            } => self.back_patch_jump_location(usage, location.clone()),
             WriteAction::AddLabel {
                 label_type: usage,
                 location,
             } => {
-                self.add_label(*usage, location.clone());
+                self.add_label(usage, location.clone());
                 Ok(())
             }
             WriteAction::FunctionDeclaration { name, arity, .. } => {
-                self.functions.push(LoxFunction::new(name.clone(), *arity));
+                self.function.push(LoxFunction::new(name.clone(), arity));
                 Ok(())
             }
             WriteAction::FunctionDeclarationEnd {
                 is_global,
+                upvalues,
                 location,
             } => {
                 // Ensure that the function `return`s. If the function already has a
                 // return statement, the op codes added here do nothing.
-                self.write_op_code(OpCode::Nil, &Arguments::None, location)?;
-                self.write_op_code(OpCode::Return, &Arguments::None, location)?;
+                self.write_op_code(OpCode::Nil, Arguments::None, location.clone())?;
+                self.write_op_code(OpCode::Return, Arguments::None, location.clone())?;
 
-                let defined = self.functions.pop().unwrap();
+                let defined = self.function.pop().unwrap();
                 let name = defined.name.clone();
                 self.write_op_code(
-                    OpCode::Constant,
-                    &Arguments::Value(crate::value::Value::Function(Rc::new(defined))),
-                    location,
+                    OpCode::Closure,
+                    Arguments::Value(crate::common::value::Value::Closure(Rc::new(Closure::new(
+                        defined, upvalues,
+                    )))),
+                    location.clone(),
                 )?;
-                if *is_global {
+                if is_global {
                     self.write_op_code(
                         OpCode::DefineGlobal,
-                        &Arguments::Value(crate::value::Value::String(name)),
+                        Arguments::Value(crate::common::value::Value::String(name)),
                         location,
                     )?;
                 }
@@ -181,48 +185,50 @@ impl<'a> Compiler<'a> {
     fn write_op_code(
         &mut self,
         op_code: OpCode,
-        args: &Arguments,
-        location: &Location,
+        args: Arguments,
+        location: Location,
     ) -> Result<(), Error> {
         let offset = self.current_chunk().code_len();
         match op_code {
             OpCode::GetLocal => {
-                let index = try_get_offset_from(op_code, args, location)?;
+                let index = try_get_offset_from(op_code, &args, &location)?;
                 self.current_chunk_mut().add_code(OpCode::GetLocal.into());
                 self.current_chunk_mut().add_code(index);
             }
             OpCode::SetLocal => {
-                let index = try_get_offset_from(op_code, args, location)?;
+                let index = try_get_offset_from(op_code, &args, &location)?;
                 self.current_chunk_mut().add_code(OpCode::SetLocal.into());
                 self.current_chunk_mut().add_code(index);
             }
+            OpCode::GetUpValue => todo!(),
+            OpCode::SetUpValue => todo!(),
             OpCode::GetGlobal => {
-                let id = try_get_interned_string_from(op_code, args, location)?;
-                let index = self.add_constant(Value::String(id), location)?;
+                let id = try_get_interned_string_from(op_code, &args, &location)?;
+                let index = self.add_constant(Value::String(id), &location)?;
                 self.current_chunk_mut().add_code(OpCode::GetGlobal.into());
                 self.current_chunk_mut().add_code(index);
             }
             OpCode::DefineGlobal => {
-                let id = try_get_interned_string_from(op_code, args, location)?;
-                let index = self.add_constant(Value::String(id), location)?;
+                let id = try_get_interned_string_from(op_code, &args, &location)?;
+                let index = self.add_constant(Value::String(id), &location)?;
                 self.current_chunk_mut()
                     .add_code(OpCode::DefineGlobal.into());
                 self.current_chunk_mut().add_code(index);
             }
             OpCode::SetGlobal => {
-                let id = try_get_interned_string_from(op_code, args, location)?;
-                let index = self.add_constant(Value::String(id), location)?;
+                let id = try_get_interned_string_from(op_code, &args, &location)?;
+                let index = self.add_constant(Value::String(id), &location)?;
                 self.current_chunk_mut().add_code(OpCode::SetGlobal.into());
                 self.current_chunk_mut().add_code(index);
             }
             OpCode::Call => {
                 self.current_chunk_mut().add_code(OpCode::Call.into());
                 self.current_chunk_mut()
-                    .add_code(try_get_arg_count_from(op_code, args, location)?);
+                    .add_code(try_get_arg_count_from(op_code, &args, &location)?);
             }
             OpCode::Constant => {
                 let index = match args {
-                    Arguments::Value(v) => self.add_constant(v.clone(), location),
+                    Arguments::Value(v) => self.add_constant(v.clone(), &location),
                     _ => Err(Error::UnsupportedArgumentError {
                         op_code,
                         args: args.to_string(),
@@ -253,6 +259,15 @@ impl<'a> Compiler<'a> {
                 );
                 self.current_chunk_mut().add_code(u8::MAX);
                 self.current_chunk_mut().add_code(u8::MAX);
+            }
+            OpCode::Closure => {
+                let closure = match args {
+                    Arguments::Value(v @ Value::Closure(_)) => v.clone(),
+                    _ => unreachable!(),
+                };
+                let index = self.add_constant(closure, &location)?;
+                self.current_chunk_mut().add_code(op_code.into());
+                self.current_chunk_mut().add_code(index);
             }
             _ => self.current_chunk_mut().add_code(op_code.into()),
         }
@@ -343,11 +358,11 @@ impl<'a> Compiler<'a> {
     }
 
     fn current_chunk(&self) -> &Chunk {
-        &self.functions.last().unwrap().chunk()
+        &self.function.last().unwrap().chunk()
     }
 
     fn current_chunk_mut(&mut self) -> &mut Chunk {
-        self.functions.last_mut().unwrap().chunk_mut()
+        self.function.last_mut().unwrap().chunk_mut()
     }
 }
 
@@ -355,7 +370,7 @@ impl<'a> Compiler<'a> {
 mod tests {
     use std::io::Cursor;
 
-    use crate::debug::disassemble_chunk_for_testing;
+    use crate::common::chunk::debug::disassemble_chunk_for_testing;
 
     use super::Compiler;
 
@@ -370,7 +385,7 @@ mod tests {
         let result = compiler.finish();
         let mut v = Vec::<u8>::new();
         let mut cursor = Cursor::new(&mut v);
-        disassemble_chunk_for_testing(result.script.chunk(), &mut cursor);
+        disassemble_chunk_for_testing(result.script.fun().chunk(), &mut cursor);
         Ok(String::from_utf8(v)
             .map_err(|e| format!("Failed to convert the disassembled code to String {:?}", e))?)
     }

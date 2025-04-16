@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use crate::{common::chunk::Chunk, common::op_code::OpCode};
+use crate::common::{chunk::Chunk, op_code::OpCode, value::Value};
 
 pub fn disassemble_chunk(chunk: &Chunk, name: &str) {
     println!("== {} ==", name);
@@ -71,7 +71,7 @@ fn disassemble_instruction_internal(
             }
             OpCode::Closure => {
                 let const_location = chunk.get_code(offset + 1);
-                let op_len = 2;
+                let mut op_len = 2;
                 writeln!(
                     w,
                     "{:<16} {:04} {}",
@@ -79,10 +79,29 @@ fn disassemble_instruction_internal(
                     const_location,
                     chunk.get_constant(const_location.into())
                 )?;
+                let closure = match chunk.get_constant(const_location.into()) {
+                    Value::Closure(c) => c,
+                    _ => unreachable!(),
+                };
+                for _ in 0..(closure.upvalue_count()) {
+                    let is_local = chunk.get_code(offset + op_len);
+                    op_len += 1;
+                    let index = chunk.get_code(offset + op_len);
+                    op_len += 1;
+                    writeln!(
+                        w,
+                        "{:04}      |                     {} {}",
+                        offset + op_len - 2,
+                        if is_local > 0 { "local" } else { "upvalue" },
+                        index
+                    )?;
+                }
+
                 Ok(op_len)
             }
             OpCode::Negate
             | OpCode::Print
+            | OpCode::CloseUpValue
             | OpCode::Return
             | OpCode::Nil
             | OpCode::True

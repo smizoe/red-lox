@@ -11,7 +11,8 @@ pub(crate) enum Value {
     Bool(bool),
     Number(f64),
     String(InternedString),
-    Closure(Rc<Closure>),
+    // not Rc<Closure> to create an empty upvalues vector upon cloning.
+    Closure(Closure),
     NativeFunction(Rc<NativeFunction>),
 }
 

@@ -4,7 +4,7 @@ use crate::{
     common::code_location_registry::LabelType, common::op_code::OpCode, common::InternedString,
 };
 
-use super::variable_location::UpValue;
+use super::{function::Closure, variable_location::UpValueLocation};
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Arguments {
@@ -13,6 +13,7 @@ pub(crate) enum Arguments {
     Offset(u8),
     ArgCount(u8),
     LabelType(LabelType),
+    ClosureConfig(Closure, Vec<UpValueLocation>)
 }
 
 impl std::fmt::Display for Arguments {
@@ -77,7 +78,7 @@ pub(crate) enum WriteAction {
     },
     FunctionDeclarationEnd {
         is_global: bool,
-        upvalues: Vec<UpValue>,
+        upvalues: Vec<UpValueLocation>,
         location: Location,
     },
 }

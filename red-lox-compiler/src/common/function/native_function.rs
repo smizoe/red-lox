@@ -1,29 +1,16 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc, time::SystemTime};
 
 use crate::{
-    common::{InternedString, InternedStringRegistry},
+    common::function::{Error, Result},
     common::value::Value,
+    common::{InternedString, InternedStringRegistry},
 };
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("Native function {name} takes {arity} arguments but got {args_len} arguments")]
-    FunctionArityMismatchError {
-        name: InternedString,
-        args_len: usize,
-        arity: usize,
-    },
-    #[error("{msg}")]
-    NativeFunctionCallError { msg: String },
-}
 
 pub(crate) struct NativeFunction {
     fun: RefCell<Box<dyn FnMut(Vec<Value>) -> Result<Value>>>,
     name: InternedString,
     arity: usize,
 }
-
-type Result<T> = std::result::Result<T, Error>;
 
 impl NativeFunction {
     pub(crate) fn new(

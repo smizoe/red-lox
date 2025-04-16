@@ -1,7 +1,7 @@
 use red_lox_ast::scanner::Location;
 
 use crate::common::variable_location::Local;
-use crate::common::variable_location::UpValue;
+use crate::common::variable_location::UpValueLocation;
 use crate::{
     common::{write_action::WriteAction, InternedString},
     parser::{guard::BreakableStatement, Parser, Result},
@@ -58,7 +58,7 @@ impl<'a, 'b> DerefMut for FunctionDeclarationScope<'a, 'b> {
 
 pub(in crate::parser) struct FunctionEnv {
     pub locals: Vec<Local>,
-    pub upvalues: Vec<UpValue>,
+    pub upvalues: Vec<UpValueLocation>,
     pub breakable_stmts: Vec<BreakableStatement>,
     pub scope_depth: i32,
     pub function_type: FunctionType,
@@ -89,19 +89,22 @@ impl FunctionEnv {
     /// - Ok(None) when the value turns out to be stored in a global variable.
     /// - Err(e) when there are too many upvalues stored.
     pub fn resolve_upvalue(&mut self, name: &str, location: &Location) -> Result<Option<u8>> {
-        match &mut self.prev_env {
-            None => return Ok(None),
-            Some(e) => match e.resolve_local(name, location)? {
-                Some(v) => {
-                    return Ok(Some(self.add_upvalue(UpValue::LocalOfParent(v), location)?));
-                }
-                None => match e.resolve_upvalue(name, location)? {
-                    None => Ok(None),
-                    Some(v) => Ok(Some(
-                        self.add_upvalue(UpValue::UpValueOfParent(v), location)?,
-                    )),
-                },
-            },
+        if self.prev_env.is_none() {
+            return Ok(None);
+        }
+
+        let e = self.prev_env.as_mut().unwrap();
+        if let Some(v) = e.resolve_local(name, location)? {
+            e.mark_captured(v.into());
+            return Ok(Some(
+                self.add_upvalue(UpValueLocation::LocalOfParent(v), location)?,
+            ));
+        }
+        match e.resolve_upvalue(name, location)? {
+            None => Ok(None),
+            Some(v) => Ok(Some(
+                self.add_upvalue(UpValueLocation::UpValueOfParent(v), location)?,
+            )),
         }
     }
 
@@ -126,7 +129,7 @@ impl FunctionEnv {
         Ok(None)
     }
 
-    fn add_upvalue(&mut self, upvalue: UpValue, location: &Location) -> Result<u8> {
+    fn add_upvalue(&mut self, upvalue: UpValueLocation, location: &Location) -> Result<u8> {
         if let Some((i, _)) = self
             .upvalues
             .iter()
@@ -146,6 +149,10 @@ impl FunctionEnv {
 
         self.upvalues.push(upvalue);
         Ok(u8::try_from(self.upvalues.len()).unwrap())
+    }
+
+    fn mark_captured(&mut self, index: usize) {
+        self.locals[index].is_captured = true;
     }
 }
 

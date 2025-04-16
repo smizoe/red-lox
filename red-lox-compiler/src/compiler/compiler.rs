@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use red_lox_ast::scanner::{Location, Scanner};
 
 use crate::{
@@ -9,6 +7,7 @@ use crate::{
         function::{Closure, LoxFunction},
         op_code::OpCode,
         value::Value,
+        variable_location::UpValueLocation,
         write_action::{Arguments, WriteAction},
         InternedString, InternedStringRegistry,
     },
@@ -121,7 +120,7 @@ impl<'a> Compiler<'a> {
 
     pub fn finish(mut self) -> CompilationResult {
         CompilationResult {
-            script: Closure::new(self.function.pop().unwrap(), Vec::new()),
+            script: Closure::new(self.function.pop().unwrap(), 0),
             interned_string_registry: self.parser.interned_string_registry,
         }
     }
@@ -164,9 +163,7 @@ impl<'a> Compiler<'a> {
                 let name = defined.name.clone();
                 self.write_op_code(
                     OpCode::Closure,
-                    Arguments::Value(crate::common::value::Value::Closure(Rc::new(Closure::new(
-                        defined, upvalues,
-                    )))),
+                    Arguments::ClosureConfig(Closure::new(defined, upvalues.len()), upvalues),
                     location.clone(),
                 )?;
                 if is_global {
@@ -261,13 +258,27 @@ impl<'a> Compiler<'a> {
                 self.current_chunk_mut().add_code(u8::MAX);
             }
             OpCode::Closure => {
-                let closure = match args {
-                    Arguments::Value(v @ Value::Closure(_)) => v.clone(),
+                let (closure, upvalues) = match args {
+                    Arguments::ClosureConfig(closure, upvalues) => (closure, upvalues),
                     _ => unreachable!(),
                 };
-                let index = self.add_constant(closure, &location)?;
-                self.current_chunk_mut().add_code(op_code.into());
-                self.current_chunk_mut().add_code(index);
+                let index = self.add_constant(Value::Closure(closure), &location)?;
+                let chunk = self.current_chunk_mut();
+                chunk.add_code(op_code.into());
+                chunk.add_code(index);
+                for upvalue in upvalues {
+                    match upvalue {
+                        UpValueLocation::LocalOfParent(v) => {
+                            // Represents that the upvalue is a local of the parent env.
+                            chunk.add_code(1);
+                            chunk.add_code(v);
+                        }
+                        UpValueLocation::UpValueOfParent(v) => {
+                            chunk.add_code(0);
+                            chunk.add_code(v);
+                        }
+                    }
+                }
             }
             _ => self.current_chunk_mut().add_code(op_code.into()),
         }

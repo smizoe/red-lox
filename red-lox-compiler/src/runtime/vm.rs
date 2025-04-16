@@ -1,21 +1,17 @@
 use std::{collections::HashMap, fmt::Write, rc::Rc};
 
-use crate::{
-    common::chunk::debug::disassemble_instruction,
-    common::chunk::Chunk,
-    common::function::Closure,
-    common::function::{register_native_functions, NativeFunction},
-    common::op_code::OpCode,
-    common::value::Value,
-    common::{InternedString, InternedStringRegistry},
+use crate::common::{
+    chunk::{debug::disassemble_instruction, Chunk},
+    function::{register_native_functions, Closure, NativeFunction, UpValue},
+    op_code::OpCode,
+    value::Value,
+    InternedString, InternedStringRegistry, Stack, FRAMES_MAX,
 };
 
-const FRAMES_MAX: usize = 64;
-const STACK_MAX: usize = 256 * FRAMES_MAX;
+use super::Error;
 
 pub struct VirtualMachine<'a> {
-    stack: [Option<Value>; STACK_MAX],
-    stack_top: usize,
+    stack: Stack,
     frames: [Option<CallFrame>; FRAMES_MAX],
     frame_count: usize,
     out: &'a mut dyn std::io::Write,
@@ -25,7 +21,7 @@ pub struct VirtualMachine<'a> {
 
 struct CallFrame {
     // The closure associated with the current frame.
-    pub closure: Rc<Closure>,
+    pub closure: Closure,
     // The instruction pointer/index for the current frame.
     pub ip: usize,
     // The bottom (the index into the 0-th byte in the stack) of the current frame.
@@ -33,7 +29,7 @@ struct CallFrame {
 }
 
 impl CallFrame {
-    pub fn new(closure: Rc<Closure>, ip: usize, slot_index: usize) -> Self {
+    pub fn new(closure: Closure, ip: usize, slot_index: usize) -> Self {
         Self {
             closure,
             ip,
@@ -46,35 +42,6 @@ impl CallFrame {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("compile error")]
-    CompileError,
-    #[error("[At line {line}] runtime conversion error: {error}")]
-    OperationConversionError {
-        line: usize,
-        error: crate::common::op_code::ConversionError,
-    },
-    #[error("[At line {line}] runtime operation error: {msg}")]
-    InvalidOperandError { line: usize, msg: String },
-    #[error(
-        "[At line {line}] runtime error: tried to refer to an uninitialized location in a stack"
-    )]
-    UninitializedStackReferenceError { line: usize },
-    #[error(
-        "[At line {line}] runtime error: variable '{var_name}' was accessed before it is defined."
-    )]
-    UndefinedVariableError { line: usize, var_name: String },
-    #[error(
-        "[At line {line}] a runtime error occurred while executing native function {name}: {error}"
-    )]
-    NativeFunctionCallError {
-        line: usize,
-        name: InternedString,
-        error: crate::common::function::Error,
-    },
-}
-
 impl<'a> VirtualMachine<'a> {
     pub fn new(
         script: Closure,
@@ -82,15 +49,14 @@ impl<'a> VirtualMachine<'a> {
         out: &'a mut dyn std::io::Write,
     ) -> Self {
         let mut vm = Self {
-            stack: [const { None }; STACK_MAX],
-            stack_top: 0,
+            stack: Stack::new(),
             frames: [const { None }; FRAMES_MAX],
             frame_count: 1,
             out,
             interned_string_registry,
             globals: HashMap::new(),
         };
-        let fun = Rc::new(script);
+        let fun = script;
         vm.frames[0].replace(CallFrame::new(fun.clone(), 0, 0));
         vm.push(Value::Closure(fun));
         register_native_functions(&mut vm.globals, &mut vm.interned_string_registry);
@@ -127,14 +93,29 @@ impl<'a> VirtualMachine<'a> {
                 }
                 OpCode::GetLocal => {
                     let index = self.read_byte();
-                    self.push(self.slot(index.into()).clone());
+                    self.push(self.slot(index.into()));
                 }
                 OpCode::SetLocal => {
                     let index = self.read_byte();
-                    *self.slot_mut(index.into()) = self.peek(0)?.clone();
+                    self.set_slot(index.into(), self.peek(0)?);
                 }
-                OpCode::GetUpValue => todo!(),
-                OpCode::SetUpValue => todo!(),
+                OpCode::GetUpValue => {
+                    let upvalue_index = self.read_byte();
+                    let v = self
+                        .frame()
+                        .closure
+                        .get_upvalue(upvalue_index.into())
+                        .get_value();
+                    self.push(v);
+                }
+                OpCode::SetUpValue => {
+                    let upvalue_index = self.read_byte();
+                    let v = self.peek(0)?;
+                    self.frame_mut()
+                        .closure
+                        .get_upvalue_mut(upvalue_index.into())
+                        .set_value(v);
+                }
                 OpCode::GetGlobal => match self.get_constant() {
                     Value::String(s) => {
                         let v =
@@ -150,7 +131,7 @@ impl<'a> VirtualMachine<'a> {
                 },
                 OpCode::DefineGlobal => match self.get_constant() {
                     Value::String(s) => {
-                        self.globals.insert(s, self.peek(0)?.clone());
+                        self.globals.insert(s, self.peek(0)?);
                         self.pop()?;
                     }
                     _ => unreachable!(),
@@ -163,7 +144,7 @@ impl<'a> VirtualMachine<'a> {
                                 var_name: s.to_string(),
                             });
                         }
-                        let v = self.peek(0)?.clone();
+                        let v = self.peek(0)?;
                         if let Some(ent) = self.globals.get_mut(&s) {
                             *ent = v;
                         }
@@ -171,7 +152,23 @@ impl<'a> VirtualMachine<'a> {
                     _ => unreachable!(),
                 },
                 OpCode::Closure => {
-                    let closure = self.get_constant();
+                    let mut closure = self.get_constant();
+                    let c = match &mut closure {
+                        Value::Closure(c) => c,
+                        _ => unreachable!(),
+                    };
+                    for _ in 0..c.upvalue_count() {
+                        let is_local = self.read_byte();
+                        let index = self.read_byte();
+                        if is_local > 0 {
+                            c.add_upvalue(UpValue::new(
+                                self.frame().slot_start + usize::from(index),
+                                self.stack.clone(),
+                            ));
+                        } else {
+                            c.add_upvalue(self.frame().closure.get_upvalue(index.into()).clone());
+                        }
+                    }
                     self.push(closure);
                 }
                 OpCode::Equal => {
@@ -220,12 +217,12 @@ impl<'a> VirtualMachine<'a> {
                     if self.frame_count == 0 {
                         return Ok(());
                     }
-                    self.stack_top = prev_frame.slot_start;
+                    self.stack.set_stack_top(prev_frame.slot_start);
                     self.push(result);
                 }
                 OpCode::Call => {
                     let arg_count = self.read_byte();
-                    match self.peek(arg_count.into())?.clone() {
+                    match self.peek(arg_count.into())? {
                         Value::Closure(f) => self.handle_lox_function_call(f, arg_count)?,
                         Value::NativeFunction(nf) => {
                             self.handle_native_function_call(nf, arg_count)?
@@ -313,11 +310,7 @@ impl<'a> VirtualMachine<'a> {
         }
     }
 
-    fn handle_lox_function_call(
-        &mut self,
-        closure: Rc<Closure>,
-        arg_count: u8,
-    ) -> Result<(), Error> {
+    fn handle_lox_function_call(&mut self, closure: Closure, arg_count: u8) -> Result<(), Error> {
         if closure.fun().arity != arg_count.into() {
             return Err(Error::InvalidOperandError {
                 line: self.line_of(self.ip() - 1),
@@ -337,26 +330,28 @@ impl<'a> VirtualMachine<'a> {
         self.frames[self.frame_count].replace(CallFrame {
             closure,
             ip: 0,
-            slot_start: self.stack_top - usize::from(arg_count) - 1,
+            slot_start: self.stack.stack_top() - usize::from(arg_count) - 1,
         });
         self.frame_count += 1;
         Ok(())
     }
+
     fn handle_native_function_call(
         &mut self,
         nf: Rc<NativeFunction>,
         arg_count: u8,
     ) -> Result<(), Error> {
-        let args = self.stack[(self.stack_top - usize::from(arg_count))..self.stack_top]
-            .iter()
-            .map(|v| v.clone().unwrap())
+        let args = (0..usize::from(arg_count))
+            .rev()
+            .map(|i| self.stack.peek(i).unwrap())
             .collect::<Vec<Value>>();
         let result = nf.call(args).map_err(|e| Error::NativeFunctionCallError {
             line: self.line_of(self.ip() - 1),
             name: nf.name(),
             error: e,
         })?;
-        self.stack_top -= usize::from(arg_count) + 1;
+        self.stack
+            .set_stack_top(self.stack.stack_top() - (usize::from(arg_count) + 1));
         self.push(result);
         Ok(())
     }
@@ -406,25 +401,23 @@ impl<'a> VirtualMachine<'a> {
     }
 
     fn push(&mut self, value: Value) {
-        self.stack[self.stack_top] = Some(value);
-        self.stack_top += 1;
+        self.stack.push(value);
     }
 
     fn pop(&mut self) -> Result<Value, Error> {
-        self.stack_top -= 1;
-        let mut v = None;
-        std::mem::swap(&mut self.stack[self.stack_top], &mut v);
-        v.ok_or(Error::UninitializedStackReferenceError {
-            line: self.line_of(self.ip() - 1),
-        })
+        self.stack
+            .pop()
+            .ok_or(Error::UninitializedStackReferenceError {
+                line: self.line_of(self.ip() - 1),
+            })
     }
 
-    fn peek(&self, depth: usize) -> Result<&Value, Error> {
-        self.stack[self.stack_top - 1 - depth].as_ref().ok_or(
-            Error::UninitializedStackReferenceError {
+    fn peek(&self, depth: usize) -> Result<Value, Error> {
+        self.stack
+            .peek(depth)
+            .ok_or(Error::UninitializedStackReferenceError {
                 line: self.line_of(self.ip() - 1),
-            },
-        )
+            })
     }
 
     fn check_binary_plus_operands(&self) -> Result<(), Error> {
@@ -484,34 +477,19 @@ impl<'a> VirtualMachine<'a> {
     }
 
     fn print_stack(&self) {
-        for v in self.stack[0..self.stack_top].iter() {
-            print!("          ");
-            use Value::*;
-            match v.as_ref().unwrap() {
-                Nil => println!("[  nil  ]"),
-                Bool(b) => println!("[{:^7}]", b),
-                Number(v) => println!("[{:^7.3}]", v),
-                String(s) => println!("[{:^7}]", s),
-                Closure(f) => println!("[{:^7}]", f.fun()),
-                nf @ NativeFunction(_) => println!("[{:^7}]", nf),
-            }
-        }
+        self.stack.print();
     }
 
     fn intern_string(&mut self, s: &str) -> InternedString {
         self.interned_string_registry.intern_string(s)
     }
 
-    fn slot(&self, index: usize) -> &Value {
-        self.stack[self.frame().slot_start + index]
-            .as_ref()
-            .unwrap()
+    fn slot(&self, index: usize) -> Value {
+        self.stack.get_at(self.frame().slot_start + index)
     }
 
-    fn slot_mut(&mut self, index: usize) -> &mut Value {
-        self.stack[self.frame().slot_start + index]
-            .as_mut()
-            .unwrap()
+    fn set_slot(&mut self, index: usize, value: Value) {
+        self.stack.set_at(self.frame().slot_start + index, value);
     }
 
     pub fn stack_trace(&self) -> String {

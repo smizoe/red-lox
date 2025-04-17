@@ -262,7 +262,7 @@ impl<'a> Compiler<'a> {
                     Arguments::ClosureConfig(closure, upvalues) => (closure, upvalues),
                     _ => unreachable!(),
                 };
-                let index = self.add_constant(Value::Closure(closure), &location)?;
+                let index = self.add_constant(Value::Closure(Box::new(closure)), &location)?;
                 let chunk = self.current_chunk_mut();
                 chunk.add_code(op_code.into());
                 chunk.add_code(index);

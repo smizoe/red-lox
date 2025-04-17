@@ -1,5 +1,6 @@
 use crate::common::InternedString;
 
+#[derive(Debug)]
 pub(crate) struct Local {
     name: InternedString,
     pub(crate) depth: i32,

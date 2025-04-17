@@ -12,7 +12,7 @@ pub(crate) enum Value {
     Number(f64),
     String(InternedString),
     // not Rc<Closure> to create an empty upvalues vector upon cloning.
-    Closure(Closure),
+    Closure(Box<Closure>),
     NativeFunction(Rc<NativeFunction>),
 }
 
@@ -90,7 +90,7 @@ mod tests {
     use std::mem::size_of;
 
     #[test]
-    fn test_value_size_is_that_of_usize() {
-        assert_eq!(size_of::<Value>(), size_of::<usize>() * 2);
+    fn test_value_size_is_twice_that_of_u64() {
+        assert_eq!(size_of::<Value>(), size_of::<u64>() * 2);
     }
 }

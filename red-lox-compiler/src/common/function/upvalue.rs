@@ -11,7 +11,10 @@ pub(crate) struct UpValue {
 
 #[derive(Debug, Clone)]
 enum UpValueInternal {
-    Open { index: usize, stack: Stack },
+    Open {
+        index: usize,
+        stack: Rc<RefCell<Stack>>,
+    },
     Closed(Value),
 }
 
@@ -29,7 +32,7 @@ impl PartialEq for UpValueInternal {
 }
 
 impl UpValue {
-    pub fn new(index: usize, stack: Stack) -> Self {
+    pub fn new(index: usize, stack: Rc<RefCell<Stack>>) -> Self {
         Self {
             internal: Rc::new(RefCell::new(UpValueInternal::Open { index, stack })),
         }
@@ -38,7 +41,7 @@ impl UpValue {
     /// Gets the Value represented by this UpValue
     pub fn get_value(&self) -> Value {
         match &*self.internal.borrow() {
-            UpValueInternal::Open { index, stack } => stack.get_at(*index),
+            UpValueInternal::Open { index, stack } => stack.borrow().get_at(*index),
             UpValueInternal::Closed(v) => v.clone(),
         }
     }
@@ -46,8 +49,17 @@ impl UpValue {
     /// Sets the Value to the UpValue.
     pub fn set_value(&mut self, value: Value) {
         match &mut *self.internal.borrow_mut() {
-            UpValueInternal::Open { index, stack } => stack.set_at(*index, value),
+            UpValueInternal::Open { index, stack } => stack.borrow_mut().set_at(*index, value),
             UpValueInternal::Closed(v) => *v = value,
+        }
+    }
+
+    /// Gets the index part of the open upvalue.
+    /// If the object called on is a closed upvalue, this returns an Err(e) value.
+    pub fn get_index(&self) -> Result<usize> {
+        match &*self.internal.borrow() {
+            UpValueInternal::Closed(_) => Err(Error::ClosedUpValueLocationRequestError),
+            UpValueInternal::Open { index, .. } => Ok(*index),
         }
     }
 
@@ -56,10 +68,18 @@ impl UpValue {
     /// what is pointed to by this value.
     pub fn close(&mut self) -> Result<()> {
         let value = match &mut *self.internal.borrow_mut() {
-            UpValueInternal::Open { stack, .. } => stack.pop(),
+            UpValueInternal::Open { stack, .. } => stack.borrow_mut().pop(),
             _ => return Err(Error::DoublyClosedUpvalueError),
         };
         *self.internal.borrow_mut() = UpValueInternal::Closed(value.unwrap());
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub fn is_closed(&self) -> bool {
+        match &*self.internal.borrow() {
+            UpValueInternal::Closed(_) => true,
+            _ => false,
+        }
     }
 }

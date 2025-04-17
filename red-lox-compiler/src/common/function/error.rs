@@ -10,8 +10,10 @@ pub enum Error {
     },
     #[error("{msg}")]
     NativeFunctionCallError { msg: String },
-    #[error("Runtime error: an upvalue is being closed twice.")]
+    #[error("An upvalue is being closed twice.")]
     DoublyClosedUpvalueError,
+    #[error("A closed upvalue is requested to provide its index into the stack.")]
+    ClosedUpValueLocationRequestError,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -1,7 +1,5 @@
 use std::rc::Rc;
 
-use crate::common::Stack;
-
 use super::{LoxFunction, UpValue};
 
 #[derive(Debug, Clone, PartialEq)]

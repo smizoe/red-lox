@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Write, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt::Write, rc::Rc};
 
 use crate::common::{
     chunk::{debug::disassemble_instruction, Chunk},
@@ -8,10 +8,10 @@ use crate::common::{
     InternedString, InternedStringRegistry, Stack, FRAMES_MAX,
 };
 
-use super::{CallFrame, Error};
+use super::{call_frame::CallFrame, Error};
 
 pub struct VirtualMachine<'a> {
-    stack: Stack,
+    stack: Rc<RefCell<Stack>>,
     frames: [Option<CallFrame>; FRAMES_MAX],
     frame_count: usize,
     out: &'a mut dyn std::io::Write,
@@ -26,7 +26,7 @@ impl<'a> VirtualMachine<'a> {
         out: &'a mut dyn std::io::Write,
     ) -> Self {
         let mut vm = Self {
-            stack: Stack::new(),
+            stack: Rc::new(RefCell::new(Stack::new())),
             frames: [const { None }; FRAMES_MAX],
             frame_count: 1,
             out,
@@ -34,8 +34,8 @@ impl<'a> VirtualMachine<'a> {
             globals: HashMap::new(),
         };
         let fun = script;
-        vm.frames[0].replace(CallFrame::new(fun.clone(), 0, 0));
-        vm.push(Value::Closure(fun));
+        vm.frames[0].replace(CallFrame::new(Box::new(fun.clone()), 0, 0));
+        vm.push(Value::Closure(Box::new(fun)));
         register_native_functions(&mut vm.globals, &mut vm.interned_string_registry);
         vm
     }
@@ -148,6 +148,7 @@ impl<'a> VirtualMachine<'a> {
                     }
                     self.push(closure);
                 }
+                OpCode::CloseUpValue => todo!(),
                 OpCode::Equal => {
                     let b = self.pop()?;
                     let a = self.pop()?;
@@ -194,7 +195,7 @@ impl<'a> VirtualMachine<'a> {
                     if self.frame_count == 0 {
                         return Ok(());
                     }
-                    self.stack.set_stack_top(prev_frame.slot_start);
+                    self.set_stack_top(prev_frame.slot_start);
                     self.push(result);
                 }
                 OpCode::Call => {
@@ -287,7 +288,7 @@ impl<'a> VirtualMachine<'a> {
         }
     }
 
-    fn handle_lox_function_call(&mut self, closure: Closure, arg_count: u8) -> Result<(), Error> {
+    fn handle_lox_function_call(&mut self, closure: Box<Closure>, arg_count: u8) -> Result<(), Error> {
         if closure.fun().arity != arg_count.into() {
             return Err(Error::InvalidOperandError {
                 line: self.line_of(self.ip() - 1),
@@ -307,7 +308,7 @@ impl<'a> VirtualMachine<'a> {
         self.frames[self.frame_count].replace(CallFrame {
             closure,
             ip: 0,
-            slot_start: self.stack.stack_top() - usize::from(arg_count) - 1,
+            slot_start: self.stack_top() - usize::from(arg_count) - 1,
         });
         self.frame_count += 1;
         Ok(())
@@ -320,15 +321,14 @@ impl<'a> VirtualMachine<'a> {
     ) -> Result<(), Error> {
         let args = (0..usize::from(arg_count))
             .rev()
-            .map(|i| self.stack.peek(i).unwrap())
+            .map(|i| self.peek(i).unwrap())
             .collect::<Vec<Value>>();
         let result = nf.call(args).map_err(|e| Error::NativeFunctionCallError {
             line: self.line_of(self.ip() - 1),
             name: nf.name(),
             error: e,
         })?;
-        self.stack
-            .set_stack_top(self.stack.stack_top() - (usize::from(arg_count) + 1));
+        self.set_stack_top(self.stack_top() - (usize::from(arg_count) + 1));
         self.push(result);
         Ok(())
     }
@@ -378,11 +378,12 @@ impl<'a> VirtualMachine<'a> {
     }
 
     fn push(&mut self, value: Value) {
-        self.stack.push(value);
+        self.stack.borrow_mut().push(value);
     }
 
     fn pop(&mut self) -> Result<Value, Error> {
         self.stack
+            .borrow_mut()
             .pop()
             .ok_or(Error::UninitializedStackReferenceError {
                 line: self.line_of(self.ip() - 1),
@@ -391,10 +392,19 @@ impl<'a> VirtualMachine<'a> {
 
     fn peek(&self, depth: usize) -> Result<Value, Error> {
         self.stack
+            .borrow()
             .peek(depth)
             .ok_or(Error::UninitializedStackReferenceError {
                 line: self.line_of(self.ip() - 1),
             })
+    }
+
+    fn stack_top(&self) -> usize {
+        self.stack.borrow().stack_top()
+    }
+
+    fn set_stack_top(&mut self, value: usize) {
+        self.stack.borrow_mut().set_stack_top(value);
     }
 
     fn check_binary_plus_operands(&self) -> Result<(), Error> {
@@ -454,7 +464,7 @@ impl<'a> VirtualMachine<'a> {
     }
 
     fn print_stack(&self) {
-        self.stack.print();
+        self.stack.borrow().print();
     }
 
     fn intern_string(&mut self, s: &str) -> InternedString {
@@ -462,11 +472,13 @@ impl<'a> VirtualMachine<'a> {
     }
 
     fn slot(&self, index: usize) -> Value {
-        self.stack.get_at(self.frame().slot_start + index)
+        self.stack.borrow().get_at(self.frame().slot_start + index)
     }
 
     fn set_slot(&mut self, index: usize, value: Value) {
-        self.stack.set_at(self.frame().slot_start + index, value);
+        self.stack
+            .borrow_mut()
+            .set_at(self.frame().slot_start + index, value);
     }
 
     pub fn stack_trace(&self) -> String {

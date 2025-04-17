@@ -1,23 +1,18 @@
-use std::{
-    cell::RefCell,
-    fmt::{Debug, Formatter},
-    rc::Rc,
-};
+use std::fmt::{Debug, Formatter};
 
 use crate::common::value::Value;
 
 use super::STACK_MAX;
 
-#[derive(Clone)]
 pub(crate) struct Stack {
-    internal: Rc<RefCell<[Option<Value>; STACK_MAX]>>,
+    internal: [Option<Value>; STACK_MAX],
     stack_top: usize,
 }
 
 impl Stack {
     pub fn new() -> Self {
         Self {
-            internal: Rc::new(RefCell::new([const { None }; STACK_MAX])),
+            internal: [const { None }; STACK_MAX],
             stack_top: 0,
         }
     }
@@ -31,31 +26,31 @@ impl Stack {
     }
 
     pub fn push(&mut self, value: Value) {
-        self.internal.borrow_mut()[self.stack_top].replace(value);
+        self.internal[self.stack_top].replace(value);
         self.stack_top += 1;
     }
 
     pub fn pop(&mut self) -> Option<Value> {
         self.stack_top -= 1;
         let mut v = None;
-        std::mem::swap(&mut self.internal.borrow_mut()[self.stack_top], &mut v);
+        std::mem::swap(&mut self.internal[self.stack_top], &mut v);
         v
     }
 
     pub fn peek(&self, depth: usize) -> Option<Value> {
-        self.internal.borrow()[self.stack_top - 1 - depth].clone()
+        self.internal[self.stack_top - 1 - depth].clone()
     }
 
     pub fn get_at(&self, index: usize) -> Value {
-        self.internal.borrow()[index].clone().unwrap()
+        self.internal[index].clone().unwrap()
     }
 
     pub fn set_at(&mut self, index: usize, value: Value) {
-        self.internal.borrow_mut()[index].replace(value);
+        self.internal[index].replace(value);
     }
 
     pub fn print(&self) {
-        for v in self.internal.borrow()[0..self.stack_top].iter() {
+        for v in self.internal[0..self.stack_top].iter() {
             print!("          ");
             use Value::*;
             match v.as_ref().unwrap() {
@@ -75,7 +70,7 @@ impl Debug for Stack {
         write!(
             f,
             "Stack {{ size: {}, stack_top: {} }}",
-            self.internal.borrow().len(),
+            self.internal.len(),
             self.stack_top
         )
     }

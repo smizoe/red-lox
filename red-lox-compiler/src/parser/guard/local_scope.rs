@@ -24,13 +24,7 @@ impl<'a, 'b> Drop for LocalScope<'a, 'b> {
         self.parser.env.scope_depth -= 1;
         let location = self.left_brace_location.clone();
         let upper = self.upper_bound_of_depth(self.scope_depth());
-        let num_locals = self.locals().len();
-        for local in self
-            .locals_mut()
-            .split_off(num_locals - upper)
-            .into_iter()
-            .rev()
-        {
+        for local in self.locals_mut().split_off(upper).into_iter().rev() {
             if local.is_captured {
                 self.append_write(crate::common::write_action::WriteAction::OpCodeWrite {
                     op_code: OpCode::CloseUpValue,

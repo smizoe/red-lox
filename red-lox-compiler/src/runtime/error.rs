@@ -1,4 +1,4 @@
-use crate::common::InternedString;
+use crate::common::{self, InternedString};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -27,4 +27,10 @@ pub enum Error {
         name: InternedString,
         error: crate::common::function::Error,
     },
+    #[error("A runtime error occurred in handling an upvalue: {}", .0)]
+    InvalidUpValueOperationError(common::function::Error),
+    #[error("A runtime error occurred: an upvalue with index {index} cannot be found.")]
+    OpenUpValueNotFoundError { index: usize },
 }
+
+pub type Result<T> = std::result::Result<T, Error>;

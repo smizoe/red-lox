@@ -141,13 +141,11 @@ impl<'a> VirtualMachine<'a> {
                         let index = self.read_byte();
 
                         let upvalue = if is_local > 0 {
-                            // Add 1 to compensate for the stack location that stores the function
                             let v = UpValue::new(
                                 self.frame().slot_start + usize::from(index),
                                 self.stack.clone(),
                             );
-                            self.open_upvalue_list.insert(v.clone())?;
-                            v
+                            self.open_upvalue_list.insert(v)?
                         } else {
                             self.frame().closure.get_upvalue(index.into()).clone()
                         };

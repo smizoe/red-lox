@@ -23,8 +23,11 @@ impl UpValueList {
     /// Inserts a new node containing `upvalue`.
     /// Does nothing if there is an exiting node with its index set to
     /// `upvalue.get_index()` in the list.
-    /// Returns an Err(e) when any upvalue touched in this function is a closed one.
-    pub fn insert(&mut self, upvalue: UpValue) -> Result<()> {
+    /// Returns:
+    /// - An Ok(v); when there is an existing UpValue with the same index is found,
+    ///   the one found is cloned and returned. Otherwise, the passed argument is cloned and returned.
+    /// - An Err(e) when any upvalue touched in this function is a closed one.
+    pub fn insert(&mut self, upvalue: UpValue) -> Result<UpValue> {
         let stack_index = upvalue
             .get_index()
             .map_err(Error::InvalidUpValueOperationError)?;
@@ -35,11 +38,11 @@ impl UpValueList {
                     std::mem::swap(
                         cur,
                         &mut Some(Box::new(UpValueNode {
-                            upvalue,
+                            upvalue: upvalue.clone(),
                             next: None,
                         })),
                     );
-                    break;
+                    return Ok(upvalue);
                 }
                 Some(_) => {
                     let index = cur
@@ -49,21 +52,25 @@ impl UpValueList {
                         .get_index()
                         .map_err(Error::InvalidUpValueOperationError)?;
                     match index.cmp(&stack_index) {
-                        Ordering::Equal => break, // the value is already tracked.
+                        Ordering::Equal => {
+                            // the value is already tracked.
+                            // We clone the existing value and return it so closing it
+                            // affects all the references at once.
+                            return Ok(cur.as_ref().unwrap().upvalue.clone());
+                        }
                         Ordering::Greater => cur = &mut cur.as_mut().unwrap().next,
                         Ordering::Less => {
                             let new_node = Box::new(UpValueNode {
-                                upvalue,
+                                upvalue: upvalue.clone(),
                                 next: cur.take(),
                             });
                             std::mem::swap(cur, &mut Some(new_node));
-                            break;
+                            return Ok(upvalue);
                         }
                     }
                 }
             }
         }
-        Ok(())
     }
 
     /// Closes the open upvalue with its index equal to or greater than `index` in the list.

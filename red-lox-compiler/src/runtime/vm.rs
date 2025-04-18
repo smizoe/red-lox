@@ -8,7 +8,7 @@ use crate::common::{
     InternedString, InternedStringRegistry, Stack, FRAMES_MAX,
 };
 
-use super::{call_frame::CallFrame, Error};
+use super::{call_frame::CallFrame, upvalue_list::UpValueList, Error};
 
 pub struct VirtualMachine<'a> {
     stack: Rc<RefCell<Stack>>,
@@ -17,6 +17,7 @@ pub struct VirtualMachine<'a> {
     out: &'a mut dyn std::io::Write,
     interned_string_registry: InternedStringRegistry,
     globals: HashMap<InternedString, Value>,
+    open_upvalue_list: UpValueList,
 }
 
 impl<'a> VirtualMachine<'a> {
@@ -32,6 +33,7 @@ impl<'a> VirtualMachine<'a> {
             out,
             interned_string_registry,
             globals: HashMap::new(),
+            open_upvalue_list: UpValueList::new(),
         };
         let fun = script;
         vm.frames[0].replace(CallFrame::new(Box::new(fun.clone()), 0, 0));
@@ -137,18 +139,27 @@ impl<'a> VirtualMachine<'a> {
                     for _ in 0..c.upvalue_count() {
                         let is_local = self.read_byte();
                         let index = self.read_byte();
-                        if is_local > 0 {
-                            c.add_upvalue(UpValue::new(
+
+                        let upvalue = if is_local > 0 {
+                            // Add 1 to compensate for the stack location that stores the function
+                            let v = UpValue::new(
                                 self.frame().slot_start + usize::from(index),
                                 self.stack.clone(),
-                            ));
+                            );
+                            self.open_upvalue_list.insert(v.clone())?;
+                            v
                         } else {
-                            c.add_upvalue(self.frame().closure.get_upvalue(index.into()).clone());
-                        }
+                            self.frame().closure.get_upvalue(index.into()).clone()
+                        };
+                        c.add_upvalue(upvalue);
                     }
                     self.push(closure);
                 }
-                OpCode::CloseUpValue => todo!(),
+                OpCode::CloseUpValue => {
+                    self.open_upvalue_list
+                        .close_upvalues_at_and_above(self.stack_top() - 1)?;
+                    self.pop()?;
+                }
                 OpCode::Equal => {
                     let b = self.pop()?;
                     let a = self.pop()?;
@@ -192,6 +203,8 @@ impl<'a> VirtualMachine<'a> {
                     let result = self.pop()?;
                     self.frame_count -= 1;
                     let prev_frame = self.frames[self.frame_count].take().unwrap();
+                    self.open_upvalue_list
+                        .close_upvalues_at_and_above(prev_frame.slot_start)?;
                     if self.frame_count == 0 {
                         return Ok(());
                     }
@@ -288,7 +301,11 @@ impl<'a> VirtualMachine<'a> {
         }
     }
 
-    fn handle_lox_function_call(&mut self, closure: Box<Closure>, arg_count: u8) -> Result<(), Error> {
+    fn handle_lox_function_call(
+        &mut self,
+        closure: Box<Closure>,
+        arg_count: u8,
+    ) -> Result<(), Error> {
         if closure.fun().arity != arg_count.into() {
             return Err(Error::InvalidOperandError {
                 line: self.line_of(self.ip() - 1),

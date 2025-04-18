@@ -10,7 +10,7 @@ pub(crate) struct LocalScope<'a, 'b> {
 
 impl<'a, 'b> LocalScope<'a, 'b> {
     pub fn new(parser: &'b mut Parser<'a>) -> Self {
-        parser.env.scope_depth += 1;
+        parser.scope_depth += 1;
         let location = parser.prev.location.clone();
         Self {
             parser,
@@ -21,9 +21,9 @@ impl<'a, 'b> LocalScope<'a, 'b> {
 
 impl<'a, 'b> Drop for LocalScope<'a, 'b> {
     fn drop(&mut self) {
-        self.parser.env.scope_depth -= 1;
+        self.parser.scope_depth -= 1;
         let location = self.left_brace_location.clone();
-        let upper = self.upper_bound_of_depth(self.scope_depth());
+        let upper = self.upper_bound_of_depth(self.scope_depth);
         for local in self.locals_mut().split_off(upper).into_iter().rev() {
             if local.is_captured {
                 self.append_write(crate::common::write_action::WriteAction::OpCodeWrite {

@@ -30,7 +30,7 @@ impl<'a, 'b> FunctionDeclarationScope<'a, 'b> {
 impl<'a, 'b> Drop for FunctionDeclarationScope<'a, 'b> {
     fn drop(&mut self) {
         let location = self.prev.location.clone();
-        let is_global = self.scope_depth() == 0;
+        let is_global = self.scope_depth == 0;
         let mut env = self.parser.env.prev_env.take().unwrap();
         std::mem::swap(&mut self.parser.env, &mut env);
 
@@ -60,7 +60,6 @@ pub(in crate::parser) struct FunctionEnv {
     pub locals: Vec<Local>,
     pub upvalues: Vec<UpValueLocation>,
     pub breakable_stmts: Vec<BreakableStatement>,
-    pub scope_depth: i32,
     pub function_type: FunctionType,
     prev_env: Option<Box<FunctionEnv>>,
 }
@@ -73,14 +72,9 @@ impl FunctionEnv {
             locals,
             upvalues: Vec::new(),
             breakable_stmts: Vec::new(),
-            scope_depth: 0,
             function_type,
             prev_env: None,
         }
-    }
-
-    pub fn scope_depth(&self) -> i32 {
-        self.scope_depth
     }
 
     /// Resolves an upvalue. An upvalue is a value on the stack that is referred in a closure.
@@ -147,8 +141,9 @@ impl FunctionEnv {
             });
         }
 
+        let index = self.upvalues.len();
         self.upvalues.push(upvalue);
-        Ok(u8::try_from(self.upvalues.len()).unwrap())
+        Ok(u8::try_from(index).unwrap())
     }
 
     fn mark_captured(&mut self, index: usize) {

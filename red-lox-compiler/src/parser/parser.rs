@@ -1,11 +1,20 @@
 use std::collections::VecDeque;
 
 use crate::{
-    common::{code_location_registry::LabelType, op_code::OpCode, variable_location::Local, write_action::{Arguments, WriteAction}, InternedString, InternedStringRegistry},
-    parser::{guard::{
-        BreakableStatement, BreakableStatementGuard, FunctionDeclarationScope, FunctionEnv,
-        FunctionType, LocalScope, StatementType,
-    }, Error, Result},
+    common::{
+        code_location_registry::LabelType,
+        op_code::OpCode,
+        variable_location::Local,
+        write_action::{Arguments, WriteAction},
+        InternedString, InternedStringRegistry,
+    },
+    parser::{
+        guard::{
+            BreakableStatement, BreakableStatementGuard, FunctionDeclarationScope, FunctionEnv,
+            FunctionType, LocalScope, StatementType,
+        },
+        Error, Result,
+    },
 };
 
 use red_lox_ast::scanner::{Location, Scanner, Token, TokenWithLocation, IDENTIFIER_TOKEN};
@@ -42,6 +51,7 @@ pub(crate) struct Parser<'a> {
     pub(crate) prev: TokenWithLocation,
     pub(crate) interned_string_registry: InternedStringRegistry,
     pub(in crate::parser) env: Box<FunctionEnv>,
+    pub(in crate::parser) scope_depth: i32,
 }
 
 impl<'a> Parser<'a> {
@@ -63,13 +73,10 @@ impl<'a> Parser<'a> {
                 InternedString::get_empty_string(),
                 FunctionType::Script,
             )),
+            scope_depth: 0,
         };
         parser.advance().expect("No token available in Scanner.");
         parser
-    }
-
-    pub fn scope_depth(&self) -> i32 {
-        self.env.scope_depth()
     }
 
     pub(crate) fn append_write(&mut self, write_action: WriteAction) {
@@ -211,10 +218,15 @@ impl<'a> Parser<'a> {
         let fun_name = self
             .interned_string_registry
             .intern_string(ident.token.id_name());
+        if self.scope_depth > 0 {
+            let fun_location = self.prev.location.clone();
+            self.declare_local(fun_name.clone(), &fun_location)?;
+            self.mark_most_recent_local_initialized();
+        }
         let args = self.get_fun_args()?;
         let mut fun_scope = FunctionDeclarationScope::new(self, fun_name, args.len());
         {
-            let mut scope = fun_scope.enter();
+            let mut scope: LocalScope<'_, '_> = fun_scope.enter();
             for arg in args {
                 let name = scope
                     .interned_string_registry
@@ -275,7 +287,7 @@ impl<'a> Parser<'a> {
         let name = self
             .interned_string_registry
             .intern_string(ident.token.id_name());
-        if self.scope_depth() > 0 {
+        if self.scope_depth > 0 {
             self.declare_local(name.clone(), &ident.location)?;
         }
 
@@ -295,7 +307,7 @@ impl<'a> Parser<'a> {
             )
         })?;
 
-        if self.scope_depth() == 0 {
+        if self.scope_depth == 0 {
             writes.push(WriteAction::OpCodeWrite {
                 op_code: OpCode::DefineGlobal,
                 args: Arguments::Value(crate::common::value::Value::String(name)),
@@ -318,7 +330,7 @@ impl<'a> Parser<'a> {
         self.locals_mut().push(Local::new(name.clone(), -1));
 
         for local in self.locals().iter().rev() {
-            if local.depth < self.scope_depth() {
+            if local.depth < self.scope_depth {
                 break;
             }
 
@@ -919,6 +931,6 @@ impl<'a> Parser<'a> {
     }
 
     fn mark_most_recent_local_initialized(&mut self) {
-        self.locals_mut().last_mut().unwrap().depth = self.scope_depth();
+        self.locals_mut().last_mut().unwrap().depth = self.scope_depth;
     }
 }

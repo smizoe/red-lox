@@ -38,11 +38,7 @@ fn disassemble_instruction_internal(
     }
     match chunk.get_code(offset).try_into() {
         Ok(op) => match op {
-            OpCode::Constant
-            | OpCode::DefineGlobal
-            | OpCode::GetGlobal
-            | OpCode::SetGlobal
-            | OpCode::Call => {
+            OpCode::Constant | OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::SetGlobal => {
                 let constant_index = chunk.get_code(offset + 1);
                 writeln!(
                     w,
@@ -53,9 +49,13 @@ fn disassemble_instruction_internal(
                 )?;
                 Ok(2)
             }
-            OpCode::GetLocal | OpCode::SetLocal | OpCode::GetUpValue | OpCode::SetUpValue => {
-                let stack_index = chunk.get_code(offset + 1);
-                writeln!(w, "{:<16} {:04}", op, stack_index)?;
+            OpCode::GetLocal
+            | OpCode::SetLocal
+            | OpCode::GetUpValue
+            | OpCode::SetUpValue
+            | OpCode::Call => {
+                let arg = chunk.get_code(offset + 1);
+                writeln!(w, "{:<16} {:04}", op, arg)?;
                 Ok(2)
             }
             OpCode::Jump | OpCode::JumpIfFalse | OpCode::Loop => {
@@ -90,7 +90,7 @@ fn disassemble_instruction_internal(
                     op_len += 1;
                     writeln!(
                         w,
-                        "{:04}      |                     {} {}",
+                        "{:04}    |                 {} {}",
                         offset + op_len - 2,
                         if is_local > 0 { "local" } else { "upvalue" },
                         index

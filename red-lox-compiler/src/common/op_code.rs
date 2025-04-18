@@ -97,6 +97,8 @@ impl TryFrom<u8> for OpCode {
             value if value == Pop as u8 => Ok(Pop),
             value if value == GetLocal as u8 => Ok(GetLocal),
             value if value == SetLocal as u8 => Ok(SetLocal),
+            value if value == GetUpValue as u8 => Ok(GetUpValue),
+            value if value == SetUpValue as u8 => Ok(SetUpValue),
             value if value == GetGlobal as u8 => Ok(GetGlobal),
             value if value == DefineGlobal as u8 => Ok(DefineGlobal),
             value if value == SetGlobal as u8 => Ok(SetGlobal),
@@ -110,6 +112,7 @@ impl TryFrom<u8> for OpCode {
             value if value == Loop as u8 => Ok(Loop),
             value if value == Call as u8 => Ok(Call),
             value if value == CloseUpValue as u8 => Ok(CloseUpValue),
+            value if value == Closure as u8 => Ok(Closure),
             _ => Err(ConversionError { from: value }),
         }
     }
@@ -153,6 +156,10 @@ mod tests {
     #[case(Loop)]
     #[case(Return)]
     #[case(Comma)]
+    #[case(Closure)]
+    #[case(GetUpValue)]
+    #[case(SetUpValue)]
+    #[case(CloseUpValue)]
     fn all_op_code_covered_by_try_from(#[case] op: OpCode) {
         let from_u8: Result<OpCode, ConversionError> = OpCode::try_from(op as u8);
         assert!(from_u8.is_ok());

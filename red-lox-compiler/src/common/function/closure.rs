@@ -26,7 +26,7 @@ impl Closure {
         self.upvalue_count
     }
 
-    pub fn add_upvalue(&mut self, upvalue: UpValue) {
+    pub(crate) fn add_upvalue(&mut self, upvalue: UpValue) {
         self.upvalues.push(upvalue);
     }
 

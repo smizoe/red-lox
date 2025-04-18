@@ -88,7 +88,7 @@ fn test_lox_interpreter(
 #[rstest]
 fn test_lox_compiler(
     #[files("../tests/lox/**/*.lox")]
-    #[exclude("(class|errors|closure|ternary_op)")]
+    #[exclude("(class|errors|ternary_op)")]
     path: PathBuf,
 ) {
     use red_lox_command::compiler::run_compiler;

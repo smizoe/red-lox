@@ -64,18 +64,15 @@ impl UpValue {
     }
 
     /// Closes this UpValue.
-    /// Assumption: when this method is called, the Value at the top of the stack is
-    /// what is pointed to by this value.
     pub fn close(&mut self) -> Result<()> {
-        let value = match &mut *self.internal.borrow_mut() {
-            UpValueInternal::Open { stack, .. } => stack.borrow_mut().pop(),
-            _ => return Err(Error::DoublyClosedUpvalueError),
-        };
-        *self.internal.borrow_mut() = UpValueInternal::Closed(value.unwrap());
+        if self.is_closed() {
+            return Err(Error::DoublyClosedUpvalueError);
+        }
+        let value = self.get_value();
+        *self.internal.borrow_mut() = UpValueInternal::Closed(value);
         Ok(())
     }
 
-    #[cfg(test)]
     pub fn is_closed(&self) -> bool {
         match &*self.internal.borrow() {
             UpValueInternal::Closed(_) => true,

@@ -13,7 +13,7 @@ impl<'a, 'b> BreakableStatementGuard<'a, 'b> {
         parser.env.breakable_stmts.push(BreakableStatement {
             statement_type: stmt_type,
             location,
-            depth: parser.scope_depth(),
+            depth: parser.scope_depth,
         });
         Self { parser }
     }

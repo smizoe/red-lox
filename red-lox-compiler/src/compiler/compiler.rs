@@ -1,8 +1,10 @@
+use std::fmt::write;
+
 use red_lox_ast::scanner::{Location, Scanner};
 
 use crate::{
     common::{
-        chunk::Chunk,
+        chunk::{debug::disassemble_chunk, Chunk},
         code_location_registry::{BackPatchLocationKey, CodeLocationRegistry, LabelKey, LabelType},
         function::{Closure, LoxFunction},
         op_code::OpCode,
@@ -161,6 +163,14 @@ impl<'a> Compiler<'a> {
 
                 let defined = self.function.pop().unwrap();
                 let name = defined.name.clone();
+
+                if cfg!(debug_assertions) {
+                    disassemble_chunk(
+                        defined.chunk(),
+                        &format!("function_defined: {}", name),
+                    );
+                }
+
                 self.write_op_code(
                     OpCode::Closure,
                     Arguments::ClosureConfig(Closure::new(defined, upvalues.len()), upvalues),
@@ -197,8 +207,16 @@ impl<'a> Compiler<'a> {
                 self.current_chunk_mut().add_code(OpCode::SetLocal.into());
                 self.current_chunk_mut().add_code(index);
             }
-            OpCode::GetUpValue => todo!(),
-            OpCode::SetUpValue => todo!(),
+            OpCode::GetUpValue => {
+                let index = try_get_offset_from(op_code, &args, &location)?;
+                self.current_chunk_mut().add_code(OpCode::GetUpValue.into());
+                self.current_chunk_mut().add_code(index);
+            }
+            OpCode::SetUpValue => {
+                let index = try_get_offset_from(op_code, &args, &location)?;
+                self.current_chunk_mut().add_code(OpCode::SetUpValue.into());
+                self.current_chunk_mut().add_code(index);
+            }
             OpCode::GetGlobal => {
                 let id = try_get_interned_string_from(op_code, &args, &location)?;
                 let index = self.add_constant(Value::String(id), &location)?;

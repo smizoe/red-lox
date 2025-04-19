@@ -171,8 +171,10 @@ pub(crate) fn get_rule(token: &Token) -> Rule {
             infix: And,
         },
         Token::Break => Rule::default(),
+        Token::Case => Rule::default(),
         Token::Continue => Rule::default(),
         Token::Class => Rule::default(),
+        Token::Default => Rule::default(),
         Token::Else => Rule::default(),
         Token::False => Rule {
             precedence: Precedence::None,
@@ -195,6 +197,7 @@ pub(crate) fn get_rule(token: &Token) -> Rule {
         Token::Print => Rule::default(),
         Token::Return => Rule::default(),
         Token::Super => Rule::default(),
+        Token::Switch => Rule::default(),
         Token::This => Rule::default(),
         Token::True => Rule {
             precedence: Precedence::None,

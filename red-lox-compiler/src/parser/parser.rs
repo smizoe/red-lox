@@ -21,6 +21,9 @@ use red_lox_ast::scanner::{Location, Scanner, Token, TokenWithLocation, IDENTIFI
 
 use super::parsing_rule::*;
 
+const SWITCH_EXPR_BEING_MATCHED: &'static str = "?switch_expr";
+const SWITCH_MATCH_COUNTER: &'static str = "?switch_match";
+
 struct BackPatchToken {
     label_type: LabelType,
     location: Location,
@@ -368,6 +371,8 @@ impl<'a> Parser<'a> {
             self.return_statement()
         } else if self.next_token_is(&Token::While)? {
             self.while_statement()
+        } else if self.next_token_is(&Token::Switch)? {
+            self.switch_statement()
         } else if self.next_token_is(&Token::LeftBrace)? {
             let mut scope = self.enter();
             scope.block()
@@ -621,6 +626,210 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    fn switch_statement(&mut self) -> Result<()> {
+        // Idea:
+        // - Store the value of the expression being matched as a local
+        // - Store a number (zero) on top of the value above
+        // - Use the boolean value to decide if we make a jump to the next case branch
+        //   (i.e., if zero, we skip the branch)
+        // - Each case branch updates the boolean value by doing the following:
+        //   * load the value being matched
+        //   * evaluate the expression of the branch
+        //   * check for the equality of the two
+        //   * if they are equal, increment the number, otherwise we skip the increment
+        let switch_location = self.prev.location.clone();
+        let mut breakable_stmt_scope =
+            BreakableStatementGuard::new(self, StatementType::Switch, switch_location.clone());
+        breakable_stmt_scope.consume(Token::LeftParen, |t| {
+            format!(
+                "{} Expected '(' after switch, found {:?}",
+                t.location, t.token
+            )
+        })?;
+        breakable_stmt_scope.expression()?;
+        breakable_stmt_scope.consume(Token::RightParen, |t| {
+            format!(
+                "{} Expected ')' after the expression for a switch statment, found {:?}",
+                t.location, t.token
+            )
+        })?;
+        breakable_stmt_scope.consume(Token::LeftBrace, |t| {
+            format!(
+                "{} Expected '{{' at the beginning of switch block, found {:?}",
+                t.location, t.token
+            )
+        })?;
+        {
+            let mut local_scope = LocalScope::new(&mut breakable_stmt_scope);
+            let left_paren_location = local_scope.prev.location.clone();
+            let (switch_expr_being_matched_str, switch_match_counter_str) =
+                local_scope.prepare_local_values_for_switch_statement()?;
+            let switch_base_expr_index = local_scope
+                .resolve_local(switch_expr_being_matched_str.as_ref(), &left_paren_location)?
+                .unwrap();
+            let switch_match_counter_index = local_scope
+                .resolve_local(switch_match_counter_str.as_ref(), &left_paren_location)?
+                .unwrap();
+
+            while local_scope.next_token_is(&Token::Case)? {
+                local_scope.switch_case(switch_base_expr_index, switch_match_counter_index)?;
+            }
+            if local_scope.next_token_is(&Token::Default)? {
+                local_scope.default_case()?;
+            }
+            local_scope.consume(Token::RightBrace, |t| {
+                format!(
+                    "{} Expected '}}' at the end of switch block, found {:?}",
+                    t.location, t.token
+                )
+            })?;
+        }
+        // HACK: To backfill the jump location, we (meaninglessly) jump to the next instruction and fill the holes.
+        breakable_stmt_scope
+            .emit_jump(OpCode::Jump, LabelType::EndOfStatement, switch_location)
+            .patch(&mut breakable_stmt_scope.pending_writes);
+        Ok(())
+    }
+
+    fn prepare_local_values_for_switch_statement(
+        &mut self,
+    ) -> Result<(InternedString, InternedString)> {
+        let left_brace_location = self.prev.location.clone();
+
+        let switch_expr_being_matched = self
+            .interned_string_registry
+            .intern_string(SWITCH_EXPR_BEING_MATCHED);
+        self.declare_local(switch_expr_being_matched.clone(), &left_brace_location)?;
+        self.mark_most_recent_local_initialized();
+
+        let switch_match_counter = self
+            .interned_string_registry
+            .intern_string(SWITCH_MATCH_COUNTER);
+        self.append_write(WriteAction::OpCodeWrite {
+            op_code: OpCode::Constant,
+            args: Arguments::Value(crate::common::value::Value::Number(0.0)),
+            location: left_brace_location.clone(),
+        });
+        self.declare_local(switch_match_counter.clone(), &left_brace_location)?;
+        self.mark_most_recent_local_initialized();
+
+        Ok((switch_expr_being_matched, switch_match_counter))
+    }
+
+    // Post-condition: the top of the stack contains a boolean that corresponds to
+    // whether the branch was run
+    fn switch_case(
+        &mut self,
+        switch_base_expr_index: u8,
+        switch_match_counter_index: u8,
+    ) -> Result<()> {
+        // switch (e) { ... case e_b: ... }
+        self.expression()?;
+        self.consume(Token::Colon, |t| format!("{} Expected ':' after the matching expression for a switch-case branch, found {:?}", t.location, t.token))?;
+        let colon_location = self.prev.location.clone();
+        // Update the boolean value that activates the current branch
+        self.append_write(WriteAction::OpCodeWrite {
+            op_code: OpCode::GetLocal,
+            args: Arguments::Offset(switch_base_expr_index),
+            location: colon_location.clone(),
+        });
+        self.append_write(WriteAction::OpCodeWrite {
+            op_code: OpCode::Equal,
+            args: Arguments::None,
+            location: colon_location.clone(),
+        });
+        // the stack top is the result of e == e_b
+        // If not equal, we skip incrementing the local
+        let mismatch_jump = self.emit_jump(
+            OpCode::JumpIfFalse,
+            LabelType::SwitchCaseSkipIncrement,
+            colon_location.clone(),
+        );
+        self.write_pop(colon_location.clone());
+        self.append_write(WriteAction::OpCodeWrite {
+            op_code: OpCode::Constant,
+            args: Arguments::Value(crate::common::value::Value::Number(1.0)),
+            location: colon_location.clone(),
+        });
+        self.append_write(WriteAction::OpCodeWrite {
+            op_code: OpCode::GetLocal,
+            args: Arguments::Offset(switch_match_counter_index),
+            location: colon_location.clone(),
+        });
+        self.append_write(WriteAction::OpCodeWrite {
+            op_code: OpCode::Add,
+            args: Arguments::None,
+            location: colon_location.clone(),
+        });
+        self.append_write(WriteAction::OpCodeWrite {
+            op_code: OpCode::SetLocal,
+            args: Arguments::Offset(switch_match_counter_index),
+            location: colon_location.clone(),
+        });
+        // Skip popping the result of e == e_b in the `false` branch
+        let match_jump = self.emit_jump(
+            OpCode::Jump,
+            LabelType::SwitchCaseSkipPop,
+            colon_location.clone(),
+        );
+        mismatch_jump.patch(&mut self.pending_writes);
+        self.write_pop(colon_location.clone());
+        self.append_write(WriteAction::OpCodeWrite {
+            op_code: OpCode::GetLocal,
+            args: Arguments::Offset(switch_match_counter_index),
+            location: colon_location.clone(),
+        });
+        match_jump.patch(&mut self.pending_writes);
+
+        // The top of the stack contains the # of matches so far.
+        // Check if any branch has matched successfully.
+        self.append_write(WriteAction::OpCodeWrite {
+            op_code: OpCode::Constant,
+            args: Arguments::Value(crate::common::value::Value::Number(0.0)),
+            location: colon_location.clone(),
+        });
+        self.append_write(WriteAction::OpCodeWrite {
+            op_code: OpCode::Greater,
+            args: Arguments::None,
+            location: colon_location.clone(),
+        });
+        let skip_branch_jump = self.emit_jump(
+            OpCode::JumpIfFalse,
+            LabelType::SwitchCaseSkipBranchStatements,
+            colon_location.clone(),
+        );
+        self.write_pop(colon_location.clone());
+        while !self.check(&Token::Case)
+            && !self.check(&Token::Default)
+            && !self.check(&Token::RightBrace)
+        {
+            self.statement()?;
+        }
+        let skip_pop_jump = self.emit_jump(
+            OpCode::Jump,
+            LabelType::SwitchCaseSkipPop,
+            self.prev.location.clone(),
+        );
+        skip_branch_jump.patch(&mut self.pending_writes);
+        let location = self.prev.location.clone();
+        self.write_pop(location);
+        skip_pop_jump.patch(&mut self.pending_writes);
+        Ok(())
+    }
+
+    fn default_case(&mut self) -> Result<()> {
+        self.consume(Token::Colon, |t| {
+            format!(
+                "{} Expected ':' after the default switch-case branch, found {:?}",
+                t.location, t.token
+            )
+        })?;
+        while !self.check(&Token::RightBrace) {
+            self.statement()?;
+        }
+        Ok(())
+    }
+
     fn break_statement(&mut self) -> Result<()> {
         match self.breakable_stmts().last().cloned() {
             None => Err(Error::MisplacedBreakStatementError {
@@ -631,15 +840,20 @@ impl<'a> Parser<'a> {
                 for _ in 0..to_pop {
                     self.write_pop(self.prev.location.clone());
                 }
-                // The current implementation jump to the end of the statement tied to the loop.
-                // This means that the next operation is Pop, which is expected to drop the expression
-                // generated in the condition clause.
-                // The following push of Nil is to offset the Pop operation.
-                self.pending_writes.push_back(WriteAction::OpCodeWrite {
-                    op_code: OpCode::Nil,
-                    args: Arguments::None,
-                    location: self.prev.location.clone(),
-                });
+                match stmt.statement_type {
+                    StatementType::For | StatementType::While => {
+                        // The current implementation jump to the end of the statement tied to the loop.
+                        // This means that the next operation is Pop, which is expected to drop the expression
+                        // generated in the condition clause.
+                        // The following push of Nil is to offset the Pop operation.
+                        self.pending_writes.push_back(WriteAction::OpCodeWrite {
+                            op_code: OpCode::Nil,
+                            args: Arguments::None,
+                            location: self.prev.location.clone(),
+                        });
+                    }
+                    _ => (),
+                }
                 self.emit_jump(
                     OpCode::Jump,
                     LabelType::EndOfStatement,
@@ -658,18 +872,22 @@ impl<'a> Parser<'a> {
 
     fn continue_statement(&mut self) -> Result<()> {
         match self.breakable_stmts().last().cloned() {
-            None => Err(Error::MisplacedContinueStatementError {
-                location: self.prev.location.clone(),
-            }),
-            Some(stmt) => {
+            Some(stmt)
+                if stmt.statement_type == StatementType::For
+                    || stmt.statement_type == StatementType::While =>
+            {
                 let to_pop = self.locals().len() - self.upper_bound_of_depth(stmt.depth);
                 for _ in 0..to_pop {
                     self.write_pop(self.prev.location.clone());
                 }
-                let label_type = if stmt.statement_type == StatementType::While {
-                    LabelType::ConditionClause
-                } else {
-                    LabelType::IncrementClause
+                let label_type = match stmt.statement_type {
+                    StatementType::While => LabelType::ConditionClause,
+                    StatementType::For => LabelType::IncrementClause,
+                    StatementType::Switch => {
+                        return Err(Error::MisplacedBreakStatementError {
+                            location: self.prev.location.clone(),
+                        })
+                    }
                 };
                 self.emit_jump(OpCode::Loop, label_type, stmt.location.clone());
                 self.consume(Token::Semicolon, |t| {
@@ -680,6 +898,9 @@ impl<'a> Parser<'a> {
                 })?;
                 Ok(())
             }
+            _ => Err(Error::MisplacedContinueStatementError {
+                location: self.prev.location.clone(),
+            }),
         }
     }
 

@@ -18,7 +18,7 @@ pub enum Error {
     UninititalizedVariableAccessError { location: Location, name: String },
     #[error("{location} Can't use a break statement outside a loop or a switch statement.")]
     MisplacedBreakStatementError { location: Location },
-    #[error("{location} Can't use a continue statement outside a loop.")]
+    #[error("{location} Can't use a continue statement outside a loop or inside a switch statement.")]
     MisplacedContinueStatementError { location: Location },
     #[error("{location} A function can't have more than 255 arguments.")]
     TooManyFunctionArgumentsError { location: Location },

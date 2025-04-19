@@ -69,6 +69,9 @@ pub(crate) enum LabelType {
     StartOfStatement,
     EndOfStatement,
     EndOfExpression,
+    SwitchCaseSkipIncrement,
+    SwitchCaseSkipPop,
+    SwitchCaseSkipBranchStatements,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

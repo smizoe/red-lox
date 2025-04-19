@@ -33,6 +33,9 @@ const KEYWORDS: phf::Map<&'static [u8], Token> = phf_map! {
     b"while" => Token::While,
     b"break" => Token::Break,
     b"continue" => Token::Continue,
+    b"switch" => Token::Switch,
+    b"case" => Token::Case,
+    b"default" => Token::Default,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -70,7 +73,9 @@ pub enum Token {
     And,
     Break,
     Continue,
+    Case,
     Class,
+    Default,
     Else,
     False,
     Fun,
@@ -81,6 +86,7 @@ pub enum Token {
     Print,
     Return,
     Super,
+    Switch,
     This,
     True,
     Var,

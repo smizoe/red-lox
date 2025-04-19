@@ -30,26 +30,10 @@ impl Display for Value {
 }
 
 impl Value {
-    pub fn is_nil(&self) -> bool {
-        use Value::*;
-        match self {
-            Nil => true,
-            _ => false,
-        }
-    }
-
     pub fn is_number(&self) -> bool {
         use Value::*;
         match self {
             Number(_) => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_bool(&self) -> bool {
-        use Value::*;
-        match self {
-            Bool(_) => true,
             _ => false,
         }
     }

@@ -98,7 +98,11 @@ pub(crate) fn get_rule(token: &Token) -> Rule {
             infix: Binary,
         },
         Token::Colon => Rule::default(),
-        Token::Question => Rule::default(),
+        Token::Question => Rule {
+            precedence: Precedence::Assignment,
+            prefix: None,
+            infix: Binary,
+        },
         Token::Semicolon => Rule::default(),
         Token::Slash => Rule {
             precedence: Precedence::Factor,

@@ -187,7 +187,11 @@ impl<'a> Parser<'a> {
 
         while precedence <= get_rule(&self.current.token).precedence {
             self.advance()?;
-            self.parse_next_expr(get_rule(&self.prev.token).infix, /*unused*/ can_assign)?;
+            if self.prev.token == Token::Question {
+                self.ternary()?;
+            } else {
+                self.parse_next_expr(get_rule(&self.prev.token).infix, /*unused*/ can_assign)?;
+            }
         }
 
         if can_assign && self.next_token_is(&Token::Equal)? {
@@ -900,6 +904,30 @@ impl<'a> Parser<'a> {
         };
         self.parse_precedence(Precedence::Unary)?;
         self.pending_writes.push_back(instruction);
+        Ok(())
+    }
+
+    fn ternary(&mut self) -> Result<()> {
+        let dst_registerer = self.emit_jump(
+            OpCode::JumpIfFalse,
+            LabelType::EndOfExpression,
+            self.prev.location.clone(),
+        );
+        self.expression()?;
+        self.consume(Token::Colon, |t| {
+            format!(
+                "{} Expected ':' after the true branch of the ternary op, found {:?}",
+                t.location, t.token
+            )
+        })?;
+        let jump_after_true = self.emit_jump(
+            OpCode::Jump,
+            LabelType::EndOfExpression,
+            self.prev.location.clone(),
+        );
+        dst_registerer.patch(&mut self.pending_writes);
+        self.parse_precedence(Precedence::Assignment)?;
+        jump_after_true.patch(&mut self.pending_writes);
         Ok(())
     }
 

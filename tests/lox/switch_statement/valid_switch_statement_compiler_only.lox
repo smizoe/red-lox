@@ -1,0 +1,50 @@
+var a;
+switch (1+1) {
+    case 2:
+      a = 2;
+}
+print a; // out: 2
+switch (true) {
+    case 1:
+      a = 2;
+    default:
+      a = 0;
+}
+print a; // out: 0
+switch (true) {
+    case true:
+      a = 10;
+      // fall through
+    case false:
+      a = 5;
+}
+print a; // out: 5
+switch (true) {
+    case false:
+      a = 100;
+    case true:
+      a = 200;
+      break;
+    case nil:
+      a = 300;
+}
+print a; // out: 200
+switch (true) {
+    case true:
+      switch (a) {
+        case 100:
+          print "foo";
+          break;
+        case 200:
+          print "bar"; // out: bar
+          break;
+        default:
+          print "default";
+      }
+      break;
+    case false:
+      print "baz";
+      break;
+    default:
+      print "qux";
+}

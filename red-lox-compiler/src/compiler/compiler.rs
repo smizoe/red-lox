@@ -467,59 +467,74 @@ mod tests {
         assert_eq!(
             compile(
                 "var a;
-                 var b;
-                 var c;
-                 switch (1+1) {
+                 switch (a) {
                  case 1:
                      a = 1;
                      break;
                  case 2:
-                     b = 2;
+                     a = 2;
                  default:
-                     c = 3;
-                 }
-                 print nil;"
+                     a = 3;
+                 }"
 
             )?,
             "0000    1 OP_NIL\n\
              0001    | OP_DEFINE_GLOBAL 0000 'a'\n\
-             0003    2 OP_NIL\n\
-             0004    | OP_DEFINE_GLOBAL 0001 'b'\n\
-             0006    3 OP_NIL\n\
-             0007    | OP_DEFINE_GLOBAL 0002 'c'\n\
-             0009    4 OP_CONSTANT 0003 '1'\n\
-             0011    | OP_CONSTANT 0004 '1'\n\
-             0013    | OP_ADD\n\
-             0014    | OP_FALSE\n\
-             0015    5 OP_GET_LOCAL 0001\n\
-             0017    | OP_CONSTANT 0005 '1'\n\
-             0019    | OP_GET_LOCAL 0001\n\
-             0021    | OP_EQUAL\n\
-             0022    | OP_JUMP_IF_FALSE 0022 -> 35\n\
-             0025    6 OP_CONSTANT 0006 '1'\n\
-             0027    | OP_SET_GLOBAL 0007 'a'\n\
-             0029    | OP_POP\n\
-             0030    7 OP_POP\n\
-             0031    | OP_NIL\n\
-             0032    4 OP_JUMP 0032 -> 60\n\
-             0035    8 OP_GET_LOCAL 0001\n\
-             0037    | OP_CONSTANT 0008 '2'\n\
-             0039    | OP_GET_LOCAL 0001\n\
-             0041    | OP_EQUAL\n\
-             0042    | OP_JUMP_IF_FALSE 0042 -> 50\n\
-             0045    9 OP_CONSTANT 0009 '2'\n\
-             0047    | OP_SET_GLOBAL 0010 'b'\n\
+             0003    2 OP_GET_GLOBAL 0001 'a'\n\
+             0005    | OP_CONSTANT 0002 '0'\n\
+             0007    3 OP_CONSTANT 0003 '1'\n\
+             0009    | OP_GET_LOCAL 0001\n\
+             0011    | OP_EQUAL\n\
+             0012    | OP_JUMP_IF_FALSE 0012 -> 26\n\
+             0015    | OP_POP\n\
+             0016    | OP_CONSTANT 0004 '1'\n\
+             0018    | OP_GET_LOCAL 0002\n\
+             0020    | OP_ADD\n\
+             0021    | OP_SET_LOCAL 0002\n\
+             0023    | OP_JUMP 0023 -> 29\n\
+             0026    | OP_POP\n\
+             0027    | OP_GET_LOCAL 0002\n\
+             0029    | OP_CONSTANT 0005 '0'\n\
+             0031    | OP_GREATER\n\
+             0032    | OP_JUMP_IF_FALSE 0032 -> 49\n\
+             0035    | OP_POP\n\
+             0036    4 OP_CONSTANT 0006 '1'\n\
+             0038    | OP_SET_GLOBAL 0007 'a'\n\
+             0040    | OP_POP\n\
+             0041    5 OP_POP\n\
+             0042    | OP_POP\n\
+             0043    2 OP_JUMP 0043 -> 98\n\
+             0046    5 OP_JUMP 0046 -> 50\n\
              0049    | OP_POP\n\
-             0050   11 OP_CONSTANT 0011 '3'\n\
-             0052    | OP_SET_GLOBAL 0012 'c'\n\
-             0054    | OP_POP\n\
-             0055   12 OP_POP\n\
-             0056    4 OP_POP\n\
-             0057    | OP_JUMP 0057 -> 60\n\
-             0060   13 OP_NIL\n\
-             0061    | OP_PRINT\n\
-             0062    | OP_NIL\n\
-             0063    | OP_RETURN\n"
+             0050    6 OP_CONSTANT 0008 '2'\n\
+             0052    | OP_GET_LOCAL 0001\n\
+             0054    | OP_EQUAL\n\
+             0055    | OP_JUMP_IF_FALSE 0055 -> 69\n\
+             0058    | OP_POP\n\
+             0059    | OP_CONSTANT 0009 '1'\n\
+             0061    | OP_GET_LOCAL 0002\n\
+             0063    | OP_ADD\n\
+             0064    | OP_SET_LOCAL 0002\n\
+             0066    | OP_JUMP 0066 -> 72\n\
+             0069    | OP_POP\n\
+             0070    | OP_GET_LOCAL 0002\n\
+             0072    | OP_CONSTANT 0010 '0'\n\
+             0074    | OP_GREATER\n\
+             0075    | OP_JUMP_IF_FALSE 0075 -> 87\n\
+             0078    | OP_POP\n\
+             0079    7 OP_CONSTANT 0011 '2'\n\
+             0081    | OP_SET_GLOBAL 0012 'a'\n\
+             0083    | OP_POP\n\
+             0084    | OP_JUMP 0084 -> 88\n\
+             0087    | OP_POP\n\
+             0088    9 OP_CONSTANT 0013 '3'\n\
+             0090    | OP_SET_GLOBAL 0014 'a'\n\
+             0092    | OP_POP\n\
+             0093    2 OP_POP\n\
+             0094    | OP_POP\n\
+             0095    | OP_JUMP 0095 -> 98\n\
+             0098   10 OP_NIL\n\
+             0099    | OP_RETURN\n"
         );
         Ok(())
     }

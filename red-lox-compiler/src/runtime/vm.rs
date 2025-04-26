@@ -2,6 +2,7 @@ use std::{cell::RefCell, collections::HashMap, fmt::Write, rc::Rc};
 
 use crate::common::{
     chunk::{debug::disassemble_instruction, Chunk},
+    class::{Class, Instance},
     function::{register_native_functions, Closure, NativeFunction, UpValue},
     op_code::OpCode,
     value::Value,
@@ -94,6 +95,49 @@ impl<'a> VirtualMachine<'a> {
                         .closure
                         .get_upvalue_mut(upvalue_index.into())
                         .set_value(v);
+                }
+                OpCode::GetProperty => {
+                    let instance = match self.peek(0)? {
+                        Value::Instance(i) => i,
+                        v => {
+                            return Err(Error::InvalidPropertyAccessError {
+                                type_str: v.to_type_str().to_string(),
+                            })
+                        }
+                    };
+                    let name = match self.get_constant() {
+                        Value::String(s) => s,
+                        _ => unreachable!(),
+                    };
+                    match instance.get_field(&name) {
+                        Some(v) => {
+                            self.pop()?;
+                            self.push(v);
+                        }
+                        None => {
+                            return Err(Error::UndefinedPropertyError {
+                                name: name.to_string(),
+                            })
+                        }
+                    }
+                }
+                OpCode::SetProperty => {
+                    let mut instance = match self.peek(1)? {
+                        Value::Instance(i) => i,
+                        v => {
+                            return Err(Error::InvalidPropertyAccessError {
+                                type_str: v.to_type_str().to_string(),
+                            })
+                        }
+                    };
+                    let name = match self.get_constant() {
+                        Value::String(s) => s,
+                        _ => unreachable!(),
+                    };
+                    instance.set_field(name, self.peek(0)?);
+                    let v = self.pop()?;
+                    self.pop()?; // pop the instance
+                    self.push(v);
                 }
                 OpCode::GetGlobal => match self.get_constant() {
                     Value::String(s) => {
@@ -209,12 +253,25 @@ impl<'a> VirtualMachine<'a> {
                     self.set_stack_top(prev_frame.slot_start);
                     self.push(result);
                 }
+                OpCode::Class => {
+                    let name = match self.get_constant() {
+                        Value::String(s) => s,
+                        _ => unreachable!(),
+                    };
+                    self.push(Value::Class(Class::new(name).into()));
+                }
                 OpCode::Call => {
                     let arg_count = self.read_byte();
                     match self.peek(arg_count.into())? {
                         Value::Closure(f) => self.handle_lox_function_call(f, arg_count)?,
                         Value::NativeFunction(nf) => {
                             self.handle_native_function_call(nf, arg_count)?
+                        }
+                        Value::Class(c) => {
+                            let index = self.stack_top() - usize::from(arg_count) - 1;
+                            self.stack
+                                .borrow_mut()
+                                .set_at(index, Value::Instance(Box::new(Instance::new(c))));
                         }
                         others => {
                             return Err(Error::InvalidOperandError {

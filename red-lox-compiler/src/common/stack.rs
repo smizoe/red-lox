@@ -60,6 +60,8 @@ impl Stack {
                 String(s) => println!("[{:^7}]", s),
                 Closure(f) => println!("[{:^7}]", f.fun()),
                 nf @ NativeFunction(_) => println!("[{:^7}]", nf),
+                Class(c) => println!("[{:^7}]", c),
+                Instance(i) => println!("[{:^7}]", i),
             }
         }
     }

@@ -5,6 +5,8 @@ use crate::common::function::Closure;
 use crate::common::function::NativeFunction;
 use crate::common::InternedString;
 
+use super::class::{Class, Instance};
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Value {
     Nil,
@@ -14,6 +16,8 @@ pub(crate) enum Value {
     // not Rc<Closure> to create an empty upvalues vector upon cloning.
     Closure(Box<Closure>),
     NativeFunction(Rc<NativeFunction>),
+    Class(Rc<Class>),
+    Instance(Box<Instance>),
 }
 
 impl Display for Value {
@@ -25,6 +29,8 @@ impl Display for Value {
             Value::String(s) => write!(f, "{}", s),
             Value::Closure(c) => write!(f, "{}", c.fun()),
             Value::NativeFunction(_) => write!(f, "<native fn>"),
+            Value::Class(c) => write!(f, "{}", c),
+            Value::Instance(i) => write!(f, "{}", i),
         }
     }
 }
@@ -64,6 +70,8 @@ impl Value {
             String(_) => "string",
             Closure(_) => "closure",
             NativeFunction(_) => "native function",
+            Class(_) => "class",
+            Instance(_) => "instance",
         }
     }
 }

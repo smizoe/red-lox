@@ -180,6 +180,23 @@ impl<'a> Compiler<'a> {
                 }
                 Ok(())
             }
+            WriteAction::ClassDeclaration {
+                name,
+                is_global,
+                location,
+            } => {
+                let v = self.add_constant(Value::String(name.clone()), &location)?;
+                self.current_chunk_mut().add_code(OpCode::Class.into());
+                self.current_chunk_mut().add_code(v);
+                if is_global {
+                    self.write_op_code(
+                        OpCode::DefineGlobal,
+                        Arguments::Value(crate::common::value::Value::String(name)),
+                        location,
+                    )?;
+                }
+                Ok(())
+            }
         }
     }
 
@@ -292,6 +309,19 @@ impl<'a> Compiler<'a> {
                         }
                     }
                 }
+            }
+            OpCode::Class => {
+                let id = try_get_interned_string_from(op_code, &args, &location)?;
+                let v = self.add_constant(Value::String(id), &location)?;
+                let chunk = self.current_chunk_mut();
+                chunk.add_code(op_code.into());
+                chunk.add_code(v);
+            }
+            OpCode::SetProperty | OpCode::GetProperty => {
+                let id = try_get_interned_string_from(op_code, &args, &location)?;
+                let v = self.add_constant(Value::String(id), &location)?;
+                self.current_chunk_mut().add_code(op_code.into());
+                self.current_chunk_mut().add_code(v);
             }
             _ => self.current_chunk_mut().add_code(op_code.into()),
         }
@@ -476,7 +506,6 @@ mod tests {
                  default:
                      a = 3;
                  }"
-
             )?,
             "0000    1 OP_NIL\n\
              0001    | OP_DEFINE_GLOBAL 0000 'a'\n\

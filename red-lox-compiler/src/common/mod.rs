@@ -1,4 +1,5 @@
 pub mod chunk;
+pub(crate) mod class;
 pub(crate) mod code_location_registry;
 mod constant;
 pub(crate) mod function;

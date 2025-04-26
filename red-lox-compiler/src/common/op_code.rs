@@ -11,6 +11,8 @@ pub enum OpCode {
     SetLocal,
     GetUpValue,
     SetUpValue,
+    GetProperty,
+    SetProperty,
     GetGlobal,
     DefineGlobal,
     SetGlobal,
@@ -31,6 +33,7 @@ pub enum OpCode {
     Call,
     CloseUpValue,
     Return,
+    Class,
     Comma,
 }
 
@@ -46,6 +49,8 @@ impl Display for OpCode {
             OpCode::SetLocal => write!(f, "OP_SET_LOCAL"),
             OpCode::GetUpValue => write!(f, "OP_GET_UPVALUE"),
             OpCode::SetUpValue => write!(f, "OP_SET_UPVALUE"),
+            OpCode::GetProperty => write!(f, "OP_GET_PROPERTY"),
+            OpCode::SetProperty => write!(f, "OP_SET_PROPERTY"),
             OpCode::GetGlobal => write!(f, "OP_GET_GLOBAL"),
             OpCode::DefineGlobal => write!(f, "OP_DEFINE_GLOBAL"),
             OpCode::SetGlobal => write!(f, "OP_SET_GLOBAL"),
@@ -61,6 +66,7 @@ impl Display for OpCode {
             OpCode::Call => write!(f, "OP_CALL"),
             OpCode::CloseUpValue => write!(f, "OP_CLOSE_UPVALUE"),
             OpCode::Return => write!(f, "OP_RETURN"),
+            OpCode::Class => write!(f, "OP_CLASS"),
             OpCode::Add => write!(f, "OP_ADD"),
             OpCode::Subtract => write!(f, "OP_SUBTRACT"),
             OpCode::Multiply => write!(f, "OP_MULTIPLY"),
@@ -84,6 +90,7 @@ impl TryFrom<u8> for OpCode {
         use OpCode::*;
         match value {
             value if value == Return as u8 => Ok(Return),
+            value if value == Class as u8 => Ok(Class),
             value if value == Constant as u8 => Ok(Constant),
             value if value == Nil as u8 => Ok(Nil),
             value if value == True as u8 => Ok(True),
@@ -99,6 +106,8 @@ impl TryFrom<u8> for OpCode {
             value if value == SetLocal as u8 => Ok(SetLocal),
             value if value == GetUpValue as u8 => Ok(GetUpValue),
             value if value == SetUpValue as u8 => Ok(SetUpValue),
+            value if value == GetProperty as u8 => Ok(GetProperty),
+            value if value == SetProperty as u8 => Ok(SetProperty),
             value if value == GetGlobal as u8 => Ok(GetGlobal),
             value if value == DefineGlobal as u8 => Ok(DefineGlobal),
             value if value == SetGlobal as u8 => Ok(SetGlobal),
@@ -155,11 +164,14 @@ mod tests {
     #[case(JumpIfFalse)]
     #[case(Loop)]
     #[case(Return)]
+    #[case(Class)]
     #[case(Comma)]
     #[case(Closure)]
     #[case(GetUpValue)]
     #[case(SetUpValue)]
     #[case(CloseUpValue)]
+    #[case(GetProperty)]
+    #[case(SetProperty)]
     fn all_op_code_covered_by_try_from(#[case] op: OpCode) {
         let from_u8: Result<OpCode, ConversionError> = OpCode::try_from(op as u8);
         assert!(from_u8.is_ok());

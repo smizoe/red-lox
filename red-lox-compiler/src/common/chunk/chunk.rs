@@ -46,7 +46,7 @@ impl Chunk {
             .binary_search_by_key(&offset, |LineInfo { offset, .. }| *offset)
         {
             Ok(index) => self.lines[index].line,
-            Err(index) => self.lines[index - 1].line,
+            Err(index) => self.lines[index.checked_sub(1).unwrap_or(0)].line,
         }
     }
 

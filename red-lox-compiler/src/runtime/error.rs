@@ -31,6 +31,12 @@ pub enum Error {
     InvalidUpValueOperationError(common::function::Error),
     #[error("A runtime error occurred: an upvalue with index {index} cannot be found.")]
     OpenUpValueNotFoundError { index: usize },
+    #[error("A runtime error occured: an undefined property {name} was accessed.")]
+    UndefinedPropertyError { name: String },
+    #[error(
+        "A runtime error occurred: property access is attempted on a value of type {type_str}"
+    )]
+    InvalidPropertyAccessError { type_str: String },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

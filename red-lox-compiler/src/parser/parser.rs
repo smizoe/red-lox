@@ -206,13 +206,55 @@ impl<'a> Parser<'a> {
     }
 
     fn declaration(&mut self) -> Result<()> {
-        if self.next_token_is(&Token::Fun)? {
+        if self.next_token_is(&Token::Class)? {
+            self.class_declaration()
+        } else if self.next_token_is(&Token::Fun)? {
             self.fun_declaration()
         } else if self.next_token_is(&Token::Var)? {
             self.var_declaration()
         } else {
             self.statement()
         }
+    }
+
+    fn class_declaration(&mut self) -> Result<()> {
+        let ident = self.consume(IDENTIFIER_TOKEN, |t| {
+            format!(
+                "{} Expected class name after 'class', found {:?}",
+                t.location, t.token
+            )
+        })?;
+        let name = self
+            .interned_string_registry
+            .intern_string(ident.token.id_name());
+
+        if self.scope_depth > 0 {
+            self.declare_local(name.clone(), &ident.location)?;
+        }
+
+        self.append_write(WriteAction::ClassDeclaration {
+            name,
+            is_global: self.scope_depth == 0,
+            location: ident.location.clone(),
+        });
+
+        if self.scope_depth > 0 {
+            self.mark_most_recent_local_initialized();
+        }
+
+        self.consume(Token::LeftBrace, |t| {
+            format!(
+                "{} Expected '{{' after the class name, found {:?}",
+                t.location, t.token
+            )
+        })?;
+        self.consume(Token::RightBrace, |t| {
+            format!(
+                "{} Expected '}}' at the end of class declaration, found {:?}",
+                t.location, t.token
+            )
+        })?;
+        Ok(())
     }
 
     fn fun_declaration(&mut self) -> Result<()> {
@@ -937,6 +979,33 @@ impl<'a> Parser<'a> {
         self.parse_precedence(Precedence::Assignment)
     }
 
+    fn dot(&mut self, can_assign: bool) -> Result<()> {
+        let ident = self.consume(IDENTIFIER_TOKEN, |t| {
+            format!(
+                "{} Expected a property name after '.', found {:?}",
+                t.location, t.token
+            )
+        })?;
+        let id_name = self
+            .interned_string_registry
+            .intern_string(ident.token.id_name());
+        if can_assign && self.next_token_is(&Token::Equal)? {
+            self.expression()?;
+            self.append_write(WriteAction::OpCodeWrite {
+                op_code: OpCode::SetProperty,
+                args: Arguments::Value(crate::common::value::Value::String(id_name)),
+                location: ident.location.clone(),
+            });
+        } else {
+            self.append_write(WriteAction::OpCodeWrite {
+                op_code: OpCode::GetProperty,
+                args: Arguments::Value(crate::common::value::Value::String(id_name)),
+                location: ident.location.clone(),
+            });
+        }
+        Ok(())
+    }
+
     fn parse_next_expr(&mut self, next_expr: NextExpressionType, can_assign: bool) -> Result<()> {
         match next_expr {
             NextExpressionType::None => Ok(()),
@@ -950,6 +1019,7 @@ impl<'a> Parser<'a> {
             NextExpressionType::And => self.and(),
             NextExpressionType::Or => self.or(),
             NextExpressionType::Call => self.call(),
+            NextExpressionType::Dot => self.dot(can_assign),
         }
     }
 

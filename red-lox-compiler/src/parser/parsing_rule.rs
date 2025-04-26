@@ -51,6 +51,7 @@ pub(crate) enum NextExpressionType {
     And,
     Or,
     Call,
+    Dot,
 }
 
 #[derive(Debug, Clone)]
@@ -86,7 +87,11 @@ pub(crate) fn get_rule(token: &Token) -> Rule {
             prefix: None,
             infix: Binary,
         },
-        Token::Dot => Rule::default(),
+        Token::Dot => Rule {
+            precedence: Precedence::Call,
+            prefix: None,
+            infix: Dot,
+        },
         Token::Minus => Rule {
             precedence: Precedence::Term,
             prefix: Unary,

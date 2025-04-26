@@ -13,7 +13,7 @@ pub(crate) enum Arguments {
     Offset(u8),
     ArgCount(u8),
     LabelType(LabelType),
-    ClosureConfig(Closure, Vec<UpValueLocation>)
+    ClosureConfig(Closure, Vec<UpValueLocation>),
 }
 
 impl std::fmt::Display for Arguments {
@@ -81,6 +81,11 @@ pub(crate) enum WriteAction {
         upvalues: Vec<UpValueLocation>,
         location: Location,
     },
+    ClassDeclaration {
+        name: InternedString,
+        is_global: bool,
+        location: Location,
+    },
 }
 
 impl WriteAction {
@@ -91,6 +96,7 @@ impl WriteAction {
             WriteAction::AddLabel { location, .. } => location,
             WriteAction::FunctionDeclaration { location, .. } => location,
             WriteAction::FunctionDeclarationEnd { location, .. } => location,
+            WriteAction::ClassDeclaration { location, .. } => location,
         }
     }
 }

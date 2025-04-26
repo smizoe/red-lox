@@ -8,7 +8,7 @@ use crate::{
         op_code::OpCode,
         value::Value,
         variable_location::UpValueLocation,
-        write_action::{Arguments, WriteAction},
+        write_action::WriteAction,
         InternedString, InternedStringRegistry,
     },
     parser::Parser,
@@ -41,45 +41,6 @@ pub enum Error {
     CompilationError(Vec<crate::parser::Error>),
 }
 
-fn try_get_offset_from(
-    op_code: OpCode,
-    args: &Arguments,
-    location: &Location,
-) -> Result<u8, Error> {
-    args.to_offset()
-        .ok_or_else(|| Error::UnsupportedArgumentError {
-            op_code,
-            args: args.to_string(),
-            location: location.clone(),
-        })
-}
-
-fn try_get_interned_string_from(
-    op_code: OpCode,
-    args: &Arguments,
-    location: &Location,
-) -> Result<InternedString, Error> {
-    args.to_interned_string()
-        .ok_or_else(|| Error::UnsupportedArgumentError {
-            op_code,
-            args: args.to_string(),
-            location: location.clone(),
-        })
-}
-
-fn try_get_arg_count_from(
-    op_code: OpCode,
-    args: &Arguments,
-    location: &Location,
-) -> Result<u8, Error> {
-    args.to_arg_count()
-        .ok_or_else(|| Error::UnsupportedArgumentError {
-            op_code,
-            args: args.to_string(),
-            location: location.clone(),
-        })
-}
-
 impl<'a> Compiler<'a> {
     /// Creates a new compiler that compiles the given `text``.
     pub fn new(text: &'a str) -> Self {
@@ -105,14 +66,12 @@ impl<'a> Compiler<'a> {
             )));
         }
         let cur_loc = self.parser.current.location.clone();
-        self.write(WriteAction::OpCodeWrite {
+        self.write(WriteAction::WriteNoArgOpCode {
             op_code: OpCode::Nil,
-            args: Arguments::None,
             location: cur_loc.clone(),
         })?;
-        self.write(WriteAction::OpCodeWrite {
+        self.write(WriteAction::WriteNoArgOpCode {
             op_code: OpCode::Return,
-            args: Arguments::None,
             location: cur_loc,
         })?;
         Ok(())
@@ -128,26 +87,24 @@ impl<'a> Compiler<'a> {
     /// Handles a single `WriteAction`.
     /// See each function called internally for what occurs when each variant of the enum arrives.
     fn write(&mut self, write_action: WriteAction) -> Result<(), Error> {
+        let offset = self.current_chunk().code_len();
+        let location = write_action.get_location().clone();
         match write_action {
-            WriteAction::OpCodeWrite {
-                op_code,
-                args,
-                location,
-            } => self.write_op_code(op_code, args, location),
+            WriteAction::WriteNoArgOpCode { op_code, .. } => {
+                self.current_chunk_mut().add_code(op_code.into());
+            }
             WriteAction::BackPatchJumpLocation {
                 label_type: usage,
                 location,
-            } => self.back_patch_jump_location(usage, location.clone()),
+            } => self.back_patch_jump_location(usage, location.clone())?,
             WriteAction::AddLabel {
                 label_type: usage,
                 location,
             } => {
                 self.add_label(usage, location.clone());
-                Ok(())
             }
             WriteAction::FunctionDeclaration { name, arity, .. } => {
                 self.function.push(LoxFunction::new(name.clone(), arity));
-                Ok(())
             }
             WriteAction::FunctionDeclarationEnd {
                 is_global,
@@ -156,8 +113,8 @@ impl<'a> Compiler<'a> {
             } => {
                 // Ensure that the function `return`s. If the function already has a
                 // return statement, the op codes added here do nothing.
-                self.write_op_code(OpCode::Nil, Arguments::None, location.clone())?;
-                self.write_op_code(OpCode::Return, Arguments::None, location.clone())?;
+                self.current_chunk_mut().add_code(OpCode::Nil.into());
+                self.current_chunk_mut().add_code(OpCode::Return.into());
 
                 let defined = self.function.pop().unwrap();
                 let name = defined.name.clone();
@@ -165,136 +122,11 @@ impl<'a> Compiler<'a> {
                 if cfg!(debug_assertions) {
                     disassemble_chunk(defined.chunk(), &format!("function_defined: {}", name));
                 }
+                let closure = Closure::new(defined, upvalues.len());
 
-                self.write_op_code(
-                    OpCode::Closure,
-                    Arguments::ClosureConfig(Closure::new(defined, upvalues.len()), upvalues),
-                    location.clone(),
-                )?;
-                if is_global {
-                    self.write_op_code(
-                        OpCode::DefineGlobal,
-                        Arguments::Value(crate::common::value::Value::String(name)),
-                        location,
-                    )?;
-                }
-                Ok(())
-            }
-            WriteAction::ClassDeclaration {
-                name,
-                is_global,
-                location,
-            } => {
-                let v = self.add_constant(Value::String(name.clone()), &location)?;
-                self.current_chunk_mut().add_code(OpCode::Class.into());
-                self.current_chunk_mut().add_code(v);
-                if is_global {
-                    self.write_op_code(
-                        OpCode::DefineGlobal,
-                        Arguments::Value(crate::common::value::Value::String(name)),
-                        location,
-                    )?;
-                }
-                Ok(())
-            }
-        }
-    }
-
-    /// Writes bytecodes based on the given OpCode and Argument.
-    fn write_op_code(
-        &mut self,
-        op_code: OpCode,
-        args: Arguments,
-        location: Location,
-    ) -> Result<(), Error> {
-        let offset = self.current_chunk().code_len();
-        match op_code {
-            OpCode::GetLocal => {
-                let index = try_get_offset_from(op_code, &args, &location)?;
-                self.current_chunk_mut().add_code(OpCode::GetLocal.into());
-                self.current_chunk_mut().add_code(index);
-            }
-            OpCode::SetLocal => {
-                let index = try_get_offset_from(op_code, &args, &location)?;
-                self.current_chunk_mut().add_code(OpCode::SetLocal.into());
-                self.current_chunk_mut().add_code(index);
-            }
-            OpCode::GetUpValue => {
-                let index = try_get_offset_from(op_code, &args, &location)?;
-                self.current_chunk_mut().add_code(OpCode::GetUpValue.into());
-                self.current_chunk_mut().add_code(index);
-            }
-            OpCode::SetUpValue => {
-                let index = try_get_offset_from(op_code, &args, &location)?;
-                self.current_chunk_mut().add_code(OpCode::SetUpValue.into());
-                self.current_chunk_mut().add_code(index);
-            }
-            OpCode::GetGlobal => {
-                let id = try_get_interned_string_from(op_code, &args, &location)?;
-                let index = self.add_constant(Value::String(id), &location)?;
-                self.current_chunk_mut().add_code(OpCode::GetGlobal.into());
-                self.current_chunk_mut().add_code(index);
-            }
-            OpCode::DefineGlobal => {
-                let id = try_get_interned_string_from(op_code, &args, &location)?;
-                let index = self.add_constant(Value::String(id), &location)?;
-                self.current_chunk_mut()
-                    .add_code(OpCode::DefineGlobal.into());
-                self.current_chunk_mut().add_code(index);
-            }
-            OpCode::SetGlobal => {
-                let id = try_get_interned_string_from(op_code, &args, &location)?;
-                let index = self.add_constant(Value::String(id), &location)?;
-                self.current_chunk_mut().add_code(OpCode::SetGlobal.into());
-                self.current_chunk_mut().add_code(index);
-            }
-            OpCode::Call => {
-                self.current_chunk_mut().add_code(OpCode::Call.into());
-                self.current_chunk_mut()
-                    .add_code(try_get_arg_count_from(op_code, &args, &location)?);
-            }
-            OpCode::Constant => {
-                let index = match args {
-                    Arguments::Value(v) => self.add_constant(v.clone(), &location),
-                    _ => Err(Error::UnsupportedArgumentError {
-                        op_code,
-                        args: args.to_string(),
-                        location: location.clone(),
-                    }),
-                }?;
-                self.current_chunk_mut().add_code(OpCode::Constant.into());
-                self.current_chunk_mut().add_code(index);
-            }
-            OpCode::JumpIfFalse | OpCode::Jump => {
-                self.current_chunk_mut().add_code(op_code.into());
-                self.add_backpatch_location(
-                    op_code,
-                    args.to_label_type().unwrap(),
-                    location.clone(),
-                );
-                self.current_chunk_mut().add_code(u8::MAX);
-                self.current_chunk_mut().add_code(u8::MAX);
-            }
-            OpCode::Loop => {
-                self.current_chunk_mut().add_code(op_code.into());
-                // The backpatch logic is used sa as to support patching multiple location
-                // (e.g. the continue statement).
-                self.add_backpatch_location(
-                    op_code,
-                    args.to_label_type().unwrap(),
-                    location.clone(),
-                );
-                self.current_chunk_mut().add_code(u8::MAX);
-                self.current_chunk_mut().add_code(u8::MAX);
-            }
-            OpCode::Closure => {
-                let (closure, upvalues) = match args {
-                    Arguments::ClosureConfig(closure, upvalues) => (closure, upvalues),
-                    _ => unreachable!(),
-                };
                 let index = self.add_constant(Value::Closure(Box::new(closure)), &location)?;
                 let chunk = self.current_chunk_mut();
-                chunk.add_code(op_code.into());
+                chunk.add_code(OpCode::Closure.into());
                 chunk.add_code(index);
                 for upvalue in upvalues {
                     match upvalue {
@@ -309,21 +141,68 @@ impl<'a> Compiler<'a> {
                         }
                     }
                 }
+                if is_global {
+                    self.write(WriteAction::WriteOpCodeWithValue {
+                        op_code: OpCode::DefineGlobal,
+                        value: crate::common::value::Value::String(name),
+                        location,
+                    })?;
+                }
             }
-            OpCode::Class => {
-                let id = try_get_interned_string_from(op_code, &args, &location)?;
-                let v = self.add_constant(Value::String(id), &location)?;
-                let chunk = self.current_chunk_mut();
-                chunk.add_code(op_code.into());
-                chunk.add_code(v);
+            WriteAction::ClassDeclaration {
+                name,
+                is_global,
+                location,
+            } => {
+                let v = self.add_constant(Value::String(name.clone()), &location)?;
+                self.current_chunk_mut().add_code(OpCode::Class.into());
+                self.current_chunk_mut().add_code(v);
+                if is_global {
+                    self.write(WriteAction::WriteOpCodeWithValue {
+                        op_code: OpCode::DefineGlobal,
+                        value: crate::common::value::Value::String(name),
+                        location,
+                    })?;
+                }
             }
-            OpCode::SetProperty | OpCode::GetProperty => {
-                let id = try_get_interned_string_from(op_code, &args, &location)?;
-                let v = self.add_constant(Value::String(id), &location)?;
+            WriteAction::WriteOpCodeWithOffset {
+                op_code, offset, ..
+            } => {
+                self.current_chunk_mut().add_code(op_code.into());
+                self.current_chunk_mut().add_code(offset);
+            }
+            WriteAction::WriteOpCodeWithIdentifier {
+                op_code,
+                identifier,
+                location,
+            } => {
+                let v = self.add_constant(Value::String(identifier), &location)?;
                 self.current_chunk_mut().add_code(op_code.into());
                 self.current_chunk_mut().add_code(v);
             }
-            _ => self.current_chunk_mut().add_code(op_code.into()),
+            WriteAction::WriteOpCodeWithValue {
+                op_code,
+                value,
+                location,
+            } => {
+                let index = self.add_constant(value, &location)?;
+                self.current_chunk_mut().add_code(op_code.into());
+                self.current_chunk_mut().add_code(index);
+            }
+            WriteAction::WriteJumpOpCode {
+                op_code,
+                label_type,
+                location,
+            } => {
+                self.current_chunk_mut().add_code(op_code.into());
+                self.add_backpatch_location(op_code, label_type, location.clone());
+                self.current_chunk_mut().add_code(u8::MAX);
+                self.current_chunk_mut().add_code(u8::MAX);
+            }
+            WriteAction::WriteOpCodeCall { arg_count, .. } => {
+                self.current_chunk_mut().add_code(OpCode::Call.into());
+                self.current_chunk_mut().add_code(arg_count);
+            }
         }
         self.current_chunk_mut()
             .maybe_update_line_info(offset, location.line);

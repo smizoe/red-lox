@@ -2,11 +2,8 @@ use std::collections::VecDeque;
 
 use crate::{
     common::{
-        code_location_registry::LabelType,
-        op_code::OpCode,
-        variable_location::Local,
-        write_action::{Arguments, WriteAction},
-        InternedString, InternedStringRegistry,
+        code_location_registry::LabelType, op_code::OpCode, variable_location::Local,
+        write_action::WriteAction, InternedString, InternedStringRegistry,
     },
     parser::{
         guard::{
@@ -343,9 +340,8 @@ impl<'a> Parser<'a> {
         if self.next_token_is(&Token::Equal)? {
             self.expression()?;
         } else {
-            writes.push(WriteAction::OpCodeWrite {
+            writes.push(WriteAction::WriteNoArgOpCode {
                 op_code: OpCode::Nil,
-                args: Arguments::None,
                 location: ident.location.clone(),
             });
         }
@@ -357,9 +353,9 @@ impl<'a> Parser<'a> {
         })?;
 
         if self.scope_depth == 0 {
-            writes.push(WriteAction::OpCodeWrite {
+            writes.push(WriteAction::WriteOpCodeWithIdentifier {
                 op_code: OpCode::DefineGlobal,
-                args: Arguments::Value(crate::common::value::Value::String(name)),
+                identifier: name,
                 location: ident.location.clone(),
             });
         } else {
@@ -436,11 +432,11 @@ impl<'a> Parser<'a> {
                 t.location, t.token
             )
         })?;
-        self.pending_writes.push_back(WriteAction::OpCodeWrite {
-            op_code: OpCode::Print,
-            args: Arguments::None,
-            location,
-        });
+        self.pending_writes
+            .push_back(WriteAction::WriteNoArgOpCode {
+                op_code: OpCode::Print,
+                location,
+            });
         Ok(())
     }
 
@@ -471,11 +467,12 @@ impl<'a> Parser<'a> {
             // Write OpCode::True to ensure we have some value on the stack.
             // This is to support the break statement in the following case:
             // for (;;) { break; }
-            guard.pending_writes.push_back(WriteAction::OpCodeWrite {
-                op_code: OpCode::True,
-                args: Arguments::None,
-                location: for_location.clone(),
-            });
+            guard
+                .pending_writes
+                .push_back(WriteAction::WriteNoArgOpCode {
+                    op_code: OpCode::True,
+                    location: for_location.clone(),
+                });
         } else {
             guard.expression()?;
             guard.consume(Token::Semicolon, |t| {
@@ -575,9 +572,9 @@ impl<'a> Parser<'a> {
         label_type: LabelType,
         location: Location,
     ) -> BackPatchToken {
-        self.pending_writes.push_back(WriteAction::OpCodeWrite {
+        self.pending_writes.push_back(WriteAction::WriteJumpOpCode {
             op_code,
-            args: Arguments::LabelType(label_type),
+            label_type,
             location: location.clone(),
         });
         BackPatchToken::new(label_type, location)
@@ -591,9 +588,8 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn write_pop(&mut self, location: Location) {
-        self.append_write(WriteAction::OpCodeWrite {
+        self.append_write(WriteAction::WriteNoArgOpCode {
             op_code: OpCode::Pop,
-            args: Arguments::None,
             location,
         });
     }
@@ -604,9 +600,8 @@ impl<'a> Parser<'a> {
             return Err(Error::ReturnFromTopLevelError { location });
         }
         if self.check(&Token::Semicolon) {
-            self.append_write(WriteAction::OpCodeWrite {
+            self.append_write(WriteAction::WriteNoArgOpCode {
                 op_code: OpCode::Nil,
-                args: Arguments::None,
                 location: location.clone(),
             });
         } else {
@@ -623,9 +618,8 @@ impl<'a> Parser<'a> {
     }
 
     fn write_return(&mut self, location: Location) {
-        self.append_write(WriteAction::OpCodeWrite {
+        self.append_write(WriteAction::WriteNoArgOpCode {
             op_code: OpCode::Return,
-            args: Arguments::None,
             location,
         });
     }
@@ -747,9 +741,9 @@ impl<'a> Parser<'a> {
         let switch_match_counter = self
             .interned_string_registry
             .intern_string(SWITCH_MATCH_COUNTER);
-        self.append_write(WriteAction::OpCodeWrite {
+        self.append_write(WriteAction::WriteOpCodeWithValue {
             op_code: OpCode::Constant,
-            args: Arguments::Value(crate::common::value::Value::Number(0.0)),
+            value: crate::common::value::Value::Number(0.0),
             location: left_brace_location.clone(),
         });
         self.declare_local(switch_match_counter.clone(), &left_brace_location)?;
@@ -770,14 +764,13 @@ impl<'a> Parser<'a> {
         self.consume(Token::Colon, |t| format!("{} Expected ':' after the matching expression for a switch-case branch, found {:?}", t.location, t.token))?;
         let colon_location = self.prev.location.clone();
         // Update the boolean value that activates the current branch
-        self.append_write(WriteAction::OpCodeWrite {
+        self.append_write(WriteAction::WriteOpCodeWithOffset {
             op_code: OpCode::GetLocal,
-            args: Arguments::Offset(switch_base_expr_index),
+            offset: switch_base_expr_index,
             location: colon_location.clone(),
         });
-        self.append_write(WriteAction::OpCodeWrite {
+        self.append_write(WriteAction::WriteNoArgOpCode {
             op_code: OpCode::Equal,
-            args: Arguments::None,
             location: colon_location.clone(),
         });
         // the stack top is the result of e == e_b
@@ -788,24 +781,23 @@ impl<'a> Parser<'a> {
             colon_location.clone(),
         );
         self.write_pop(colon_location.clone());
-        self.append_write(WriteAction::OpCodeWrite {
+        self.append_write(WriteAction::WriteOpCodeWithValue {
             op_code: OpCode::Constant,
-            args: Arguments::Value(crate::common::value::Value::Number(1.0)),
+            value: crate::common::value::Value::Number(1.0),
             location: colon_location.clone(),
         });
-        self.append_write(WriteAction::OpCodeWrite {
+        self.append_write(WriteAction::WriteOpCodeWithOffset {
             op_code: OpCode::GetLocal,
-            args: Arguments::Offset(switch_match_counter_index),
+            offset: switch_match_counter_index,
             location: colon_location.clone(),
         });
-        self.append_write(WriteAction::OpCodeWrite {
+        self.append_write(WriteAction::WriteNoArgOpCode {
             op_code: OpCode::Add,
-            args: Arguments::None,
             location: colon_location.clone(),
         });
-        self.append_write(WriteAction::OpCodeWrite {
+        self.append_write(WriteAction::WriteOpCodeWithOffset {
             op_code: OpCode::SetLocal,
-            args: Arguments::Offset(switch_match_counter_index),
+            offset: switch_match_counter_index,
             location: colon_location.clone(),
         });
         // Skip popping the result of e == e_b in the `false` branch
@@ -816,23 +808,22 @@ impl<'a> Parser<'a> {
         );
         mismatch_jump.patch(&mut self.pending_writes);
         self.write_pop(colon_location.clone());
-        self.append_write(WriteAction::OpCodeWrite {
+        self.append_write(WriteAction::WriteOpCodeWithOffset {
             op_code: OpCode::GetLocal,
-            args: Arguments::Offset(switch_match_counter_index),
+            offset: switch_match_counter_index,
             location: colon_location.clone(),
         });
         match_jump.patch(&mut self.pending_writes);
 
         // The top of the stack contains the # of matches so far.
         // Check if any branch has matched successfully.
-        self.append_write(WriteAction::OpCodeWrite {
+        self.append_write(WriteAction::WriteOpCodeWithValue {
             op_code: OpCode::Constant,
-            args: Arguments::Value(crate::common::value::Value::Number(0.0)),
+            value: crate::common::value::Value::Number(0.0),
             location: colon_location.clone(),
         });
-        self.append_write(WriteAction::OpCodeWrite {
+        self.append_write(WriteAction::WriteNoArgOpCode {
             op_code: OpCode::Greater,
-            args: Arguments::None,
             location: colon_location.clone(),
         });
         let skip_branch_jump = self.emit_jump(
@@ -888,11 +879,11 @@ impl<'a> Parser<'a> {
                         // This means that the next operation is Pop, which is expected to drop the expression
                         // generated in the condition clause.
                         // The following push of Nil is to offset the Pop operation.
-                        self.pending_writes.push_back(WriteAction::OpCodeWrite {
-                            op_code: OpCode::Nil,
-                            args: Arguments::None,
-                            location: self.prev.location.clone(),
-                        });
+                        self.pending_writes
+                            .push_back(WriteAction::WriteNoArgOpCode {
+                                op_code: OpCode::Nil,
+                                location: self.prev.location.clone(),
+                            });
                     }
                     _ => (),
                 }
@@ -991,15 +982,15 @@ impl<'a> Parser<'a> {
             .intern_string(ident.token.id_name());
         if can_assign && self.next_token_is(&Token::Equal)? {
             self.expression()?;
-            self.append_write(WriteAction::OpCodeWrite {
+            self.append_write(WriteAction::WriteOpCodeWithIdentifier {
                 op_code: OpCode::SetProperty,
-                args: Arguments::Value(crate::common::value::Value::String(id_name)),
+                identifier: id_name,
                 location: ident.location.clone(),
             });
         } else {
-            self.append_write(WriteAction::OpCodeWrite {
+            self.append_write(WriteAction::WriteOpCodeWithIdentifier {
                 op_code: OpCode::GetProperty,
-                args: Arguments::Value(crate::common::value::Value::String(id_name)),
+                identifier: id_name,
                 location: ident.location.clone(),
             });
         }
@@ -1029,30 +1020,51 @@ impl<'a> Parser<'a> {
             .interned_string_registry
             .intern_string(self.prev.token.id_name());
 
+        enum OffsetOrId {
+            Offset(u8),
+            Id(InternedString),
+        }
+
         let (set_op, get_op, args) =
             if let Some(v) = self.resolve_local(id.as_ref(), &var_location)? {
-                (OpCode::SetLocal, OpCode::GetLocal, Arguments::Offset(v))
+                (OpCode::SetLocal, OpCode::GetLocal, OffsetOrId::Offset(v))
             } else if let Some(v) = self.resolve_upvalue(id.as_ref(), &var_location)? {
-                (OpCode::SetUpValue, OpCode::GetUpValue, Arguments::Offset(v))
-            } else {
                 (
-                    OpCode::SetGlobal,
-                    OpCode::GetGlobal,
-                    Arguments::Value(crate::common::value::Value::String(id)),
+                    OpCode::SetUpValue,
+                    OpCode::GetUpValue,
+                    OffsetOrId::Offset(v),
                 )
+            } else {
+                (OpCode::SetGlobal, OpCode::GetGlobal, OffsetOrId::Id(id))
             };
+
+        let location = self.prev.location.clone();
         let instruction = if can_assign && self.next_token_is(&Token::Equal)? {
             self.assignment()?;
-            WriteAction::OpCodeWrite {
-                op_code: set_op,
-                args,
-                location: self.prev.location.clone(),
+            match args {
+                OffsetOrId::Offset(offset) => WriteAction::WriteOpCodeWithOffset {
+                    op_code: set_op,
+                    offset,
+                    location,
+                },
+                OffsetOrId::Id(identifier) => WriteAction::WriteOpCodeWithIdentifier {
+                    op_code: set_op,
+                    identifier,
+                    location,
+                },
             }
         } else {
-            WriteAction::OpCodeWrite {
-                op_code: get_op,
-                args,
-                location: self.prev.location.clone(),
+            match args {
+                OffsetOrId::Offset(offset) => WriteAction::WriteOpCodeWithOffset {
+                    op_code: get_op,
+                    offset,
+                    location,
+                },
+                OffsetOrId::Id(identifier) => WriteAction::WriteOpCodeWithIdentifier {
+                    op_code: get_op,
+                    identifier,
+                    location,
+                },
             }
         };
         self.pending_writes.push_back(instruction);
@@ -1107,9 +1119,8 @@ impl<'a> Parser<'a> {
     fn call(&mut self) -> Result<()> {
         let call_location = self.prev.location.clone();
         let arg_count = self.argument_list()?;
-        self.append_write(WriteAction::OpCodeWrite {
-            op_code: OpCode::Call,
-            args: Arguments::ArgCount(arg_count),
+        self.append_write(WriteAction::WriteOpCodeCall {
+            arg_count,
             location: call_location,
         });
         Ok(())
@@ -1146,11 +1157,12 @@ impl<'a> Parser<'a> {
             Token::Number(v) => *v,
             _ => unreachable!(),
         };
-        self.pending_writes.push_back(WriteAction::OpCodeWrite {
-            op_code: OpCode::Constant,
-            args: Arguments::Value(crate::common::value::Value::Number(v)),
-            location: self.prev.location.clone(),
-        });
+        self.pending_writes
+            .push_back(WriteAction::WriteOpCodeWithValue {
+                op_code: OpCode::Constant,
+                value: crate::common::value::Value::Number(v),
+                location: self.prev.location.clone(),
+            });
         Ok(())
     }
 
@@ -1160,11 +1172,12 @@ impl<'a> Parser<'a> {
             _ => unreachable!(),
         };
         let v = self.interned_string_registry.intern_string(s);
-        self.pending_writes.push_back(WriteAction::OpCodeWrite {
-            op_code: OpCode::Constant,
-            args: Arguments::Value(crate::common::value::Value::String(v)),
-            location: self.prev.location.clone(),
-        });
+        self.pending_writes
+            .push_back(WriteAction::WriteOpCodeWithValue {
+                op_code: OpCode::Constant,
+                value: crate::common::value::Value::String(v),
+                location: self.prev.location.clone(),
+            });
         Ok(())
     }
 
@@ -1175,22 +1188,21 @@ impl<'a> Parser<'a> {
             Token::False => OpCode::False,
             _ => unreachable!(),
         };
-        self.pending_writes.push_back(WriteAction::OpCodeWrite {
-            op_code,
-            args: Arguments::None,
-            location: self.prev.location.clone(),
-        });
+        self.pending_writes
+            .push_back(WriteAction::WriteNoArgOpCode {
+                op_code,
+                location: self.prev.location.clone(),
+            });
         Ok(())
     }
 
     fn unary(&mut self) -> Result<()> {
-        let instruction = WriteAction::OpCodeWrite {
+        let instruction = WriteAction::WriteNoArgOpCode {
             op_code: match &self.prev.token {
                 Token::Minus => OpCode::Negate,
                 Token::Bang => OpCode::Not,
                 _ => unreachable!(),
             },
-            args: Arguments::None,
             location: self.prev.location.clone(),
         };
         self.parse_precedence(Precedence::Unary)?;
@@ -1240,11 +1252,11 @@ impl<'a> Parser<'a> {
         let location = self.current.location.clone();
         self.parse_precedence(get_rule(&self.prev.token).precedence.plusone())?;
         for &op_code in op_codes {
-            self.pending_writes.push_back(WriteAction::OpCodeWrite {
-                op_code,
-                args: Arguments::None,
-                location: location.clone(),
-            });
+            self.pending_writes
+                .push_back(WriteAction::WriteNoArgOpCode {
+                    op_code,
+                    location: location.clone(),
+                });
         }
         Ok(())
     }

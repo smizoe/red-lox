@@ -1,7 +1,7 @@
 use red_lox_ast::scanner::Location;
 use std::ops::{Deref, DerefMut};
 
-use crate::{common::op_code::OpCode, common::write_action::Arguments, parser::Parser};
+use crate::{common::op_code::OpCode, parser::Parser};
 
 pub(crate) struct LocalScope<'a, 'b> {
     parser: &'b mut Parser<'a>,
@@ -26,9 +26,8 @@ impl<'a, 'b> Drop for LocalScope<'a, 'b> {
         let upper = self.upper_bound_of_depth(self.scope_depth);
         for local in self.locals_mut().split_off(upper).into_iter().rev() {
             if local.is_captured {
-                self.append_write(crate::common::write_action::WriteAction::OpCodeWrite {
+                self.append_write(crate::common::write_action::WriteAction::WriteNoArgOpCode {
                     op_code: OpCode::CloseUpValue,
-                    args: Arguments::None,
                     location: location.clone(),
                 });
             } else {

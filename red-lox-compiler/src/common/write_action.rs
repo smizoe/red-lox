@@ -4,61 +4,36 @@ use crate::{
     common::code_location_registry::LabelType, common::op_code::OpCode, common::InternedString,
 };
 
-use super::{function::Closure, variable_location::UpValueLocation};
-
-#[derive(Debug, PartialEq, Clone)]
-pub(crate) enum Arguments {
-    None,
-    Value(crate::common::value::Value),
-    Offset(u8),
-    ArgCount(u8),
-    LabelType(LabelType),
-    ClosureConfig(Closure, Vec<UpValueLocation>),
-}
-
-impl std::fmt::Display for Arguments {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl Arguments {
-    pub fn to_interned_string(&self) -> Option<InternedString> {
-        use Arguments::*;
-        match self {
-            Value(crate::common::value::Value::String(s)) => Some(s.clone()),
-            _ => Option::None,
-        }
-    }
-
-    pub fn to_offset(&self) -> Option<u8> {
-        match self {
-            Arguments::Offset(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-    pub fn to_arg_count(&self) -> Option<u8> {
-        match self {
-            Arguments::ArgCount(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-    pub fn to_label_type(&self) -> Option<LabelType> {
-        match self {
-            Arguments::LabelType(l) => Some(*l),
-            _ => None,
-        }
-    }
-}
+use super::{value::Value, variable_location::UpValueLocation};
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum WriteAction {
-    // Writes the op_code into the chunk.
-    OpCodeWrite {
+    WriteNoArgOpCode {
         op_code: OpCode,
-        args: Arguments,
+        location: Location,
+    },
+    WriteOpCodeWithOffset {
+        op_code: OpCode,
+        offset: u8,
+        location: Location,
+    },
+    WriteOpCodeWithIdentifier {
+        op_code: OpCode,
+        identifier: InternedString,
+        location: Location,
+    },
+    WriteOpCodeWithValue {
+        op_code: OpCode,
+        value: Value,
+        location: Location,
+    },
+    WriteJumpOpCode {
+        op_code: OpCode,
+        label_type: LabelType,
+        location: Location,
+    },
+    WriteOpCodeCall {
+        arg_count: u8,
         location: Location,
     },
     // Applies the back-patching of the jump destination.
@@ -91,12 +66,17 @@ pub(crate) enum WriteAction {
 impl WriteAction {
     pub fn get_location(&self) -> &Location {
         match self {
-            WriteAction::OpCodeWrite { location, .. } => location,
             WriteAction::BackPatchJumpLocation { location, .. } => location,
             WriteAction::AddLabel { location, .. } => location,
             WriteAction::FunctionDeclaration { location, .. } => location,
             WriteAction::FunctionDeclarationEnd { location, .. } => location,
             WriteAction::ClassDeclaration { location, .. } => location,
+            WriteAction::WriteNoArgOpCode { location, .. } => location,
+            WriteAction::WriteOpCodeWithOffset { location, .. } => location,
+            WriteAction::WriteOpCodeWithIdentifier { location, .. } => location,
+            WriteAction::WriteOpCodeWithValue { location, .. } => location,
+            WriteAction::WriteJumpOpCode { location, .. } => location,
+            WriteAction::WriteOpCodeCall { location, .. } => location,
         }
     }
 }

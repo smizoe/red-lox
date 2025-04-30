@@ -368,6 +368,7 @@ impl<'a> VirtualMachine<'a> {
                         _ => unreachable!(),
                     };
                     class.set_method(method.fun().name.clone(), method);
+                    self.pop()?;
                 }
             }
         }

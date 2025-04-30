@@ -270,9 +270,8 @@ impl<'a> Parser<'a> {
             .interned_string_registry
             .intern_string(method_name.token.id_name());
         self.function(identifier.clone(), FunctionType::Method)?;
-        self.append_write(WriteAction::WriteOpCodeWithIdentifier {
+        self.append_write(WriteAction::WriteNoArgOpCode {
             op_code: OpCode::Method,
-            identifier,
             location: method_name.location,
         });
         Ok(())

@@ -34,6 +34,7 @@ pub enum OpCode {
     CloseUpValue,
     Return,
     Class,
+    Method,
     Comma,
 }
 
@@ -67,6 +68,7 @@ impl Display for OpCode {
             OpCode::CloseUpValue => write!(f, "OP_CLOSE_UPVALUE"),
             OpCode::Return => write!(f, "OP_RETURN"),
             OpCode::Class => write!(f, "OP_CLASS"),
+            OpCode::Method => write!(f, "OP_METHOD"),
             OpCode::Add => write!(f, "OP_ADD"),
             OpCode::Subtract => write!(f, "OP_SUBTRACT"),
             OpCode::Multiply => write!(f, "OP_MULTIPLY"),
@@ -91,6 +93,7 @@ impl TryFrom<u8> for OpCode {
         match value {
             value if value == Return as u8 => Ok(Return),
             value if value == Class as u8 => Ok(Class),
+            value if value == Method as u8 => Ok(Method),
             value if value == Constant as u8 => Ok(Constant),
             value if value == Nil as u8 => Ok(Nil),
             value if value == True as u8 => Ok(True),
@@ -165,6 +168,7 @@ mod tests {
     #[case(Loop)]
     #[case(Return)]
     #[case(Class)]
+    #[case(Method)]
     #[case(Comma)]
     #[case(Closure)]
     #[case(GetUpValue)]

@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, fmt::Write, rc::Rc};
 
 use crate::common::{
     chunk::{debug::disassemble_instruction, Chunk},
-    class::{Class, Instance},
+    class::{BoundMethod, Class, Instance},
     function::{register_native_functions, Closure, NativeFunction, UpValue},
     op_code::OpCode,
     value::Value,
@@ -109,16 +109,19 @@ impl<'a> VirtualMachine<'a> {
                         Value::String(s) => s,
                         _ => unreachable!(),
                     };
-                    match instance.get_field(&name) {
-                        Some(v) => {
-                            self.pop()?;
-                            self.push(v);
-                        }
-                        None => {
-                            return Err(Error::UndefinedPropertyError {
-                                name: name.to_string(),
-                            })
-                        }
+
+                    if let Some(v) = instance.get_field(&name) {
+                        self.pop()?;
+                        self.push(v);
+                    } else if let Some(method) = instance.get_method(&name) {
+                        self.pop()?;
+                        self.push(Value::BoundMethod(Box::new(BoundMethod::new(
+                            instance, method,
+                        ))));
+                    } else {
+                        return Err(Error::UndefinedPropertyError {
+                            name: name.to_string(),
+                        });
                     }
                 }
                 OpCode::SetProperty => {
@@ -273,6 +276,9 @@ impl<'a> VirtualMachine<'a> {
                                 .borrow_mut()
                                 .set_at(index, Value::Instance(Box::new(Instance::new(c))));
                         }
+                        Value::BoundMethod(bm) => {
+                            self.handle_lox_function_call(bm.get_callable(), arg_count)?
+                        }
                         others => {
                             return Err(Error::InvalidOperandError {
                                 line: self.line_of(self.ip() - 1),
@@ -351,6 +357,17 @@ impl<'a> VirtualMachine<'a> {
                     let top = self.pop()?;
                     let _ = self.pop();
                     self.push(top);
+                }
+                OpCode::Method => {
+                    let method = match self.peek(0)? {
+                        Value::Closure(c) => c,
+                        _ => unreachable!(),
+                    };
+                    let class = match self.peek(1)? {
+                        Value::Class(c) => c,
+                        _ => unreachable!(),
+                    };
+                    class.set_method(method.fun().name.clone(), method);
                 }
             }
         }

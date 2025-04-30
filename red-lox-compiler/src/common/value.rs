@@ -5,7 +5,7 @@ use crate::common::function::Closure;
 use crate::common::function::NativeFunction;
 use crate::common::InternedString;
 
-use super::class::{Class, Instance};
+use super::class::{BoundMethod, Class, Instance};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Value {
@@ -18,6 +18,7 @@ pub(crate) enum Value {
     NativeFunction(Rc<NativeFunction>),
     Class(Rc<Class>),
     Instance(Box<Instance>),
+    BoundMethod(Box<BoundMethod>),
 }
 
 impl Display for Value {
@@ -31,6 +32,7 @@ impl Display for Value {
             Value::NativeFunction(_) => write!(f, "<native fn>"),
             Value::Class(c) => write!(f, "{}", c),
             Value::Instance(i) => write!(f, "{}", i),
+            Value::BoundMethod(b) => write!(f, "{}", b),
         }
     }
 }
@@ -72,6 +74,7 @@ impl Value {
             NativeFunction(_) => "native function",
             Class(_) => "class",
             Instance(_) => "instance",
+            BoundMethod { .. } => "bound method",
         }
     }
 }

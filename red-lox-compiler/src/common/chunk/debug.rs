@@ -56,6 +56,7 @@ fn disassemble_instruction_internal(
             | OpCode::GetProperty
             | OpCode::SetProperty
             | OpCode::Class
+            | OpCode::Method
             | OpCode::Call => {
                 let arg = chunk.get_code(offset + 1);
                 writeln!(w, "{:<16} {:04}", op, arg)?;

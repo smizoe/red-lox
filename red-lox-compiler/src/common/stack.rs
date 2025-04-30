@@ -62,6 +62,7 @@ impl Stack {
                 nf @ NativeFunction(_) => println!("[{:^7}]", nf),
                 Class(c) => println!("[{:^7}]", c),
                 Instance(i) => println!("[{:^7}]", i),
+                m @ BoundMethod { .. } => println!("[{:^7}]", m),
             }
         }
     }

@@ -13,13 +13,18 @@ pub(in crate::parser) struct FunctionDeclarationScope<'a, 'b> {
 }
 
 impl<'a, 'b> FunctionDeclarationScope<'a, 'b> {
-    pub fn new(parser: &'b mut Parser<'a>, fun_name: InternedString, arity: usize) -> Self {
+    pub fn new(
+        parser: &'b mut Parser<'a>,
+        fun_name: InternedString,
+        arity: usize,
+        function_type: FunctionType,
+    ) -> Self {
         parser.append_write(WriteAction::FunctionDeclaration {
             name: fun_name.clone(),
             arity,
             location: parser.prev.location.clone(),
         });
-        let mut env = Box::new(FunctionEnv::new(fun_name, FunctionType::Function));
+        let mut env = Box::new(FunctionEnv::new(fun_name, function_type));
         std::mem::swap(&mut parser.env, &mut env);
         parser.env.prev_env.replace(env);
 
@@ -30,7 +35,8 @@ impl<'a, 'b> FunctionDeclarationScope<'a, 'b> {
 impl<'a, 'b> Drop for FunctionDeclarationScope<'a, 'b> {
     fn drop(&mut self) {
         let location = self.prev.location.clone();
-        let is_global = self.scope_depth == 0;
+        let is_global = self.scope_depth == 0
+            && ![FunctionType::Method, FunctionType::Initializer].contains(&self.env.function_type);
         let mut env = self.parser.env.prev_env.take().unwrap();
         std::mem::swap(&mut self.parser.env, &mut env);
 
@@ -154,5 +160,7 @@ impl FunctionEnv {
 #[derive(Debug, PartialEq)]
 pub(in crate::parser) enum FunctionType {
     Function,
+    Method,
+    Initializer,
     Script,
 }

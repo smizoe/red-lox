@@ -239,18 +239,42 @@ impl<'a> Parser<'a> {
             self.mark_most_recent_local_initialized();
         }
 
+        self.variable(false)?; // load the class onto the stack.
+
         self.consume(Token::LeftBrace, |t| {
             format!(
                 "{} Expected '{{' after the class name, found {:?}",
                 t.location, t.token
             )
         })?;
+
+        while !self.check(&Token::RightBrace) && !self.check(&Token::Eof) {
+            self.method()?;
+        }
+
         self.consume(Token::RightBrace, |t| {
             format!(
                 "{} Expected '}}' at the end of class declaration, found {:?}",
                 t.location, t.token
             )
         })?;
+        self.write_pop(ident.location);
+        Ok(())
+    }
+
+    fn method(&mut self) -> Result<()> {
+        let method_name = self.consume(IDENTIFIER_TOKEN, |t| {
+            format!("{} Expected a method name, found {:?}", t.location, t.token)
+        })?;
+        let identifier = self
+            .interned_string_registry
+            .intern_string(method_name.token.id_name());
+        self.function(identifier.clone(), FunctionType::Method)?;
+        self.append_write(WriteAction::WriteOpCodeWithIdentifier {
+            op_code: OpCode::Method,
+            identifier,
+            location: method_name.location,
+        });
         Ok(())
     }
 
@@ -269,8 +293,14 @@ impl<'a> Parser<'a> {
             self.declare_local(fun_name.clone(), &fun_location)?;
             self.mark_most_recent_local_initialized();
         }
+        self.function(fun_name, FunctionType::Function)?;
+        Ok(())
+    }
+
+    fn function(&mut self, fun_name: InternedString, function_type: FunctionType) -> Result<()> {
         let args = self.get_fun_args()?;
-        let mut fun_scope = FunctionDeclarationScope::new(self, fun_name, args.len());
+        let mut fun_scope =
+            FunctionDeclarationScope::new(self, fun_name, args.len(), function_type);
         {
             let mut scope: LocalScope<'_, '_> = fun_scope.enter();
             for arg in args {

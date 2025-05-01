@@ -26,8 +26,10 @@ pub enum Error {
     TooManyFunctionArgumentsError { location: Location },
     #[error("{location} Cannot return from the top-level code.")]
     ReturnFromTopLevelError { location: Location },
-    #[error("{location} Cannot use 'this' outside of a class")]
+    #[error("{location} Cannot use 'this' outside of a class.")]
     ThisReferenceOutsideClassError { location: Location },
+    #[error("{location} Cannot return a value from an initializer method.")]
+    InvalidReturnValueFromInitializerError { location: Location },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

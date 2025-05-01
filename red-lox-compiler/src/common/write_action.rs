@@ -55,6 +55,7 @@ pub(crate) enum WriteAction {
         is_global: bool,
         upvalues: Vec<UpValueLocation>,
         location: Location,
+        function_type: FunctionType,
     },
     ClassDeclaration {
         name: InternedString,
@@ -79,4 +80,12 @@ impl WriteAction {
             WriteAction::WriteOpCodeCall { location, .. } => location,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum FunctionType {
+    Function,
+    Method,
+    Initializer,
+    Script,
 }

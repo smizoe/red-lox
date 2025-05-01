@@ -2,6 +2,7 @@ use red_lox_ast::scanner::Location;
 
 use crate::common::variable_location::Local;
 use crate::common::variable_location::UpValueLocation;
+use crate::common::write_action::FunctionType;
 use crate::{
     common::{write_action::WriteAction, InternedString},
     parser::{guard::BreakableStatement, Parser, Result},
@@ -44,6 +45,7 @@ impl<'a, 'b> Drop for FunctionDeclarationScope<'a, 'b> {
             is_global,
             upvalues: env.upvalues,
             location,
+            function_type: env.function_type,
         });
     }
 }
@@ -159,12 +161,4 @@ impl FunctionEnv {
     fn mark_captured(&mut self, index: usize) {
         self.locals[index].is_captured = true;
     }
-}
-
-#[derive(Debug, PartialEq)]
-pub(in crate::parser) enum FunctionType {
-    Function,
-    Method,
-    Initializer,
-    Script,
 }

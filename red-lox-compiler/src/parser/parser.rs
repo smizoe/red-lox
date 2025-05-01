@@ -2,13 +2,16 @@ use std::collections::VecDeque;
 
 use crate::{
     common::{
-        code_location_registry::LabelType, op_code::OpCode, variable_location::Local,
-        write_action::WriteAction, InternedString, InternedStringRegistry,
+        code_location_registry::LabelType,
+        op_code::OpCode,
+        variable_location::Local,
+        write_action::{FunctionType, WriteAction},
+        InternedString, InternedStringRegistry,
     },
     parser::{
         guard::{
             BreakableStatement, BreakableStatementGuard, FunctionDeclarationScope, FunctionEnv,
-            FunctionType, LocalScope, StatementType,
+            LocalScope, StatementType,
         },
         Error, Result,
     },
@@ -273,7 +276,12 @@ impl<'a> Parser<'a> {
         let identifier = self
             .interned_string_registry
             .intern_string(method_name.token.id_name());
-        self.function(identifier.clone(), FunctionType::Method)?;
+        let func_type = if identifier.as_ref() == "init" {
+            FunctionType::Initializer
+        } else {
+            FunctionType::Method
+        };
+        self.function(identifier.clone(), func_type)?;
         self.append_write(WriteAction::WriteNoArgOpCode {
             op_code: OpCode::Method,
             location: method_name.location,
@@ -638,6 +646,9 @@ impl<'a> Parser<'a> {
                 location: location.clone(),
             });
         } else {
+            if self.function_type() == FunctionType::Initializer {
+                return Err(Error::InvalidReturnValueFromInitializerError { location });
+            }
             self.expression()?;
         }
         self.consume(Token::Semicolon, |t| {
@@ -1310,5 +1321,9 @@ impl<'a> Parser<'a> {
 
     fn is_class_scope(&self) -> bool {
         self.class_nest_depth > 0
+    }
+
+    fn function_type(&self) -> FunctionType {
+        self.env.function_type.clone()
     }
 }

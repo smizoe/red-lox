@@ -8,7 +8,7 @@ use crate::{
         op_code::OpCode,
         value::Value,
         variable_location::UpValueLocation,
-        write_action::WriteAction,
+        write_action::{FunctionType, WriteAction},
         InternedString, InternedStringRegistry,
     },
     parser::Parser,
@@ -110,10 +110,18 @@ impl<'a> Compiler<'a> {
                 is_global,
                 upvalues,
                 location,
+                function_type,
             } => {
                 // Ensure that the function `return`s. If the function already has a
                 // return statement, the op codes added here do nothing.
-                self.current_chunk_mut().add_code(OpCode::Nil.into());
+                // When the current callable defined is an initializer method,
+                // we load the instance created onto the stack.
+                if function_type == FunctionType::Initializer {
+                    self.current_chunk_mut().add_code(OpCode::GetLocal.into());
+                    self.current_chunk_mut().add_code(0);
+                } else {
+                    self.current_chunk_mut().add_code(OpCode::Nil.into());
+                }
                 self.current_chunk_mut().add_code(OpCode::Return.into());
 
                 let defined = self.function.pop().unwrap();

@@ -37,6 +37,10 @@ pub enum Error {
         "A runtime error occurred: property access is attempted on a value of type {type_str}"
     )]
     InvalidPropertyAccessError { type_str: String },
+    #[error(
+        "A runtime error occurred: no initializer is defined but {arg_count} arguments are passed."
+    )]
+    DefaultInitializerCallWithArgumentsError { arg_count: u8 },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

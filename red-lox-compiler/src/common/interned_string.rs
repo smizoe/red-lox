@@ -2,7 +2,6 @@ use std::{
     borrow::Borrow,
     collections::HashSet,
     fmt::Display,
-    str::FromStr,
     sync::{Arc, LazyLock},
 };
 

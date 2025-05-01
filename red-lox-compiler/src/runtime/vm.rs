@@ -274,7 +274,14 @@ impl<'a> VirtualMachine<'a> {
                             let index = self.stack_top() - usize::from(arg_count) - 1;
                             self.stack
                                 .borrow_mut()
-                                .set_at(index, Value::Instance(Box::new(Instance::new(c))));
+                                .set_at(index, Value::Instance(Box::new(Instance::new(c.clone()))));
+                            if let Some(method) = c.get_method(&"init") {
+                                self.handle_lox_function_call(method, arg_count)?;
+                            } else if arg_count != 0 {
+                                return Err(Error::DefaultInitializerCallWithArgumentsError {
+                                    arg_count,
+                                });
+                            }
                         }
                         Value::BoundMethod(bm) => {
                             let index = self.stack_top() - usize::from(arg_count) - 1;

@@ -16,7 +16,7 @@ use crate::{
 
 use red_lox_ast::scanner::{Location, Scanner, Token, TokenWithLocation, IDENTIFIER_TOKEN};
 
-use super::parsing_rule::*;
+use super::{guard::ClassDeclarationScope, parsing_rule::*};
 
 const SWITCH_EXPR_BEING_MATCHED: &'static str = "?switch_expr";
 const SWITCH_MATCH_COUNTER: &'static str = "?switch_match";
@@ -52,6 +52,7 @@ pub(crate) struct Parser<'a> {
     pub(crate) interned_string_registry: InternedStringRegistry,
     pub(in crate::parser) env: Box<FunctionEnv>,
     pub(in crate::parser) scope_depth: i32,
+    pub(in crate::parser) class_nest_depth: i32,
 }
 
 impl<'a> Parser<'a> {
@@ -74,6 +75,7 @@ impl<'a> Parser<'a> {
                 FunctionType::Script,
             )),
             scope_depth: 0,
+            class_nest_depth: 0,
         };
         parser.advance().expect("No token available in Scanner.");
         parser
@@ -215,50 +217,52 @@ impl<'a> Parser<'a> {
     }
 
     fn class_declaration(&mut self) -> Result<()> {
-        let ident = self.consume(IDENTIFIER_TOKEN, |t| {
+        let mut scope = ClassDeclarationScope::new(self);
+        let ident = scope.consume(IDENTIFIER_TOKEN, |t| {
             format!(
                 "{} Expected class name after 'class', found {:?}",
                 t.location, t.token
             )
         })?;
-        let name = self
+        let name = scope
             .interned_string_registry
             .intern_string(ident.token.id_name());
 
-        if self.scope_depth > 0 {
-            self.declare_local(name.clone(), &ident.location)?;
+        if scope.scope_depth > 0 {
+            scope.declare_local(name.clone(), &ident.location)?;
         }
 
-        self.append_write(WriteAction::ClassDeclaration {
+        let is_global = scope.scope_depth == 0;
+        scope.append_write(WriteAction::ClassDeclaration {
             name,
-            is_global: self.scope_depth == 0,
+            is_global,
             location: ident.location.clone(),
         });
 
-        if self.scope_depth > 0 {
-            self.mark_most_recent_local_initialized();
+        if scope.scope_depth > 0 {
+            scope.mark_most_recent_local_initialized();
         }
 
-        self.variable(false)?; // load the class onto the stack.
+        scope.variable(false)?; // load the class onto the stack.
 
-        self.consume(Token::LeftBrace, |t| {
+        scope.consume(Token::LeftBrace, |t| {
             format!(
                 "{} Expected '{{' after the class name, found {:?}",
                 t.location, t.token
             )
         })?;
 
-        while !self.check(&Token::RightBrace) && !self.check(&Token::Eof) {
-            self.method()?;
+        while !scope.check(&Token::RightBrace) && !scope.check(&Token::Eof) {
+            scope.method()?;
         }
 
-        self.consume(Token::RightBrace, |t| {
+        scope.consume(Token::RightBrace, |t| {
             format!(
                 "{} Expected '}}' at the end of class declaration, found {:?}",
                 t.location, t.token
             )
         })?;
-        self.write_pop(ident.location);
+        scope.write_pop(ident.location);
         Ok(())
     }
 
@@ -1040,6 +1044,7 @@ impl<'a> Parser<'a> {
             NextExpressionType::Or => self.or(),
             NextExpressionType::Call => self.call(),
             NextExpressionType::Dot => self.dot(can_assign),
+            NextExpressionType::This => self.this(),
         }
     }
 
@@ -1098,6 +1103,15 @@ impl<'a> Parser<'a> {
         };
         self.pending_writes.push_back(instruction);
         Ok(())
+    }
+
+    fn this(&mut self) -> Result<()> {
+        if !self.is_class_scope() {
+            return Err(Error::ThisReferenceOutsideClassError {
+                location: self.prev.location.clone(),
+            });
+        }
+        self.variable(false)
     }
 
     fn grouping(&mut self) -> Result<()> {
@@ -1292,5 +1306,9 @@ impl<'a> Parser<'a> {
 
     fn mark_most_recent_local_initialized(&mut self) {
         self.locals_mut().last_mut().unwrap().depth = self.scope_depth;
+    }
+
+    fn is_class_scope(&self) -> bool {
+        self.class_nest_depth > 0
     }
 }

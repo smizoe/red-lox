@@ -138,7 +138,7 @@ impl BoundMethod {
         Self { receiver, method }
     }
 
-    pub(crate) fn get_callable(self) -> Box<Closure> {
-        self.method
+    pub(crate) fn destructure(self) -> (Box<Instance>, Box<Closure>) {
+        (self.receiver, self.method)
     }
 }

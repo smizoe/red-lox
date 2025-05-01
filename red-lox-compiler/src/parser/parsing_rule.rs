@@ -52,6 +52,7 @@ pub(crate) enum NextExpressionType {
     Or,
     Call,
     Dot,
+    This,
 }
 
 #[derive(Debug, Clone)]
@@ -203,7 +204,11 @@ pub(crate) fn get_rule(token: &Token) -> Rule {
         Token::Return => Rule::default(),
         Token::Super => Rule::default(),
         Token::Switch => Rule::default(),
-        Token::This => Rule::default(),
+        Token::This => Rule {
+            precedence: Precedence::None,
+            prefix: This,
+            infix: None,
+        },
         Token::True => Rule {
             precedence: Precedence::None,
             prefix: Literal,

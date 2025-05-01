@@ -277,7 +277,12 @@ impl<'a> VirtualMachine<'a> {
                                 .set_at(index, Value::Instance(Box::new(Instance::new(c))));
                         }
                         Value::BoundMethod(bm) => {
-                            self.handle_lox_function_call(bm.get_callable(), arg_count)?
+                            let index = self.stack_top() - usize::from(arg_count) - 1;
+                            let (receiver, method) = bm.destructure();
+                            self.stack
+                                .borrow_mut()
+                                .set_at(index, Value::Instance(receiver));
+                            self.handle_lox_function_call(method, arg_count)?
                         }
                         others => {
                             return Err(Error::InvalidOperandError {

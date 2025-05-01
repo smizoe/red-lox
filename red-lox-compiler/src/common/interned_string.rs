@@ -2,6 +2,7 @@ use std::{
     borrow::Borrow,
     collections::HashSet,
     fmt::Display,
+    str::FromStr,
     sync::{Arc, LazyLock},
 };
 
@@ -15,6 +16,12 @@ impl InternedString {
         static EMPTY: LazyLock<InternedString> =
             LazyLock::new(|| InternedString(Arc::new(String::new())));
         EMPTY.clone()
+    }
+
+    pub(crate) fn get_this() -> Self {
+        static THIS: LazyLock<InternedString> =
+            LazyLock::new(|| InternedString(Arc::new("this".to_string())));
+        THIS.clone()
     }
 
     pub(crate) fn from_str(s: &str) -> InternedString {

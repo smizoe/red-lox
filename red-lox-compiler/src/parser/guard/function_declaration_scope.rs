@@ -73,7 +73,11 @@ pub(in crate::parser) struct FunctionEnv {
 impl FunctionEnv {
     pub fn new(fun_name: InternedString, function_type: FunctionType) -> Self {
         let mut locals = Vec::new();
-        locals.push(Local::new(fun_name, 0));
+        if [FunctionType::Method, FunctionType::Initializer].contains(&function_type) {
+            locals.push(Local::new(InternedString::get_this(), 0));
+        } else {
+            locals.push(Local::new(fun_name, 0));
+        }
         Self {
             locals,
             upvalues: Vec::new(),

@@ -211,6 +211,17 @@ impl<'a> Compiler<'a> {
                 self.current_chunk_mut().add_code(OpCode::Call.into());
                 self.current_chunk_mut().add_code(arg_count);
             }
+            WriteAction::WriteInvoke {
+                name,
+                arg_count,
+                location,
+            } => {
+                let v = self.add_constant(Value::String(name), &location)?;
+                let chunk = self.current_chunk_mut();
+                chunk.add_code(OpCode::Invoke.into());
+                chunk.add_code(v);
+                chunk.add_code(arg_count);
+            }
         }
         self.current_chunk_mut()
             .maybe_update_line_info(offset, location.line);

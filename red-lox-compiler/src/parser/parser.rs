@@ -1031,6 +1031,13 @@ impl<'a> Parser<'a> {
                 identifier: id_name,
                 location: ident.location.clone(),
             });
+        } else if self.next_token_is(&Token::LeftParen)? {
+            let arg_count = self.argument_list()?;
+            self.append_write(WriteAction::WriteInvoke {
+                name: id_name,
+                arg_count,
+                location: ident.location.clone(),
+            });
         } else {
             self.append_write(WriteAction::WriteOpCodeWithIdentifier {
                 op_code: OpCode::GetProperty,

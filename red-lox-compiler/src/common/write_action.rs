@@ -36,6 +36,11 @@ pub(crate) enum WriteAction {
         arg_count: u8,
         location: Location,
     },
+    WriteInvoke {
+        name: InternedString,
+        arg_count: u8,
+        location: Location,
+    },
     // Applies the back-patching of the jump destination.
     BackPatchJumpLocation {
         label_type: LabelType,
@@ -78,6 +83,7 @@ impl WriteAction {
             WriteAction::WriteOpCodeWithValue { location, .. } => location,
             WriteAction::WriteJumpOpCode { location, .. } => location,
             WriteAction::WriteOpCodeCall { location, .. } => location,
+            WriteAction::WriteInvoke { location, .. } => location,
         }
     }
 }

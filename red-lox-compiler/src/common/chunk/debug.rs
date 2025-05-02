@@ -72,6 +72,19 @@ fn disassemble_instruction_internal(
                 writeln!(w, "{:<16} {:04} -> {}", op, offset, next_location)?;
                 Ok(op_len)
             }
+            OpCode::Invoke => {
+                let constant = chunk.get_code(offset + 1);
+                let arg_count = chunk.get_code(offset + 2);
+                writeln!(
+                    w,
+                    "{:<16} ({} args) {} '{}'",
+                    op,
+                    arg_count,
+                    constant,
+                    chunk.get_constant(usize::from(constant))
+                )?;
+                Ok(3)
+            }
             OpCode::Closure => {
                 let const_location = chunk.get_code(offset + 1);
                 let mut op_len = 2;

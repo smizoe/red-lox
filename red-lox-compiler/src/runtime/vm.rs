@@ -54,7 +54,7 @@ impl<'a> VirtualMachine<'a> {
             }
             let op = OpCode::try_from(self.read_byte()).map_err(|error| {
                 Error::OperationConversionError {
-                    line: self.ip() - 1,
+                    line: self.line_of(self.ip() - 1),
                     error,
                 }
             })?;
@@ -381,6 +381,32 @@ impl<'a> VirtualMachine<'a> {
                     };
                     class.set_method(method.fun().name.clone(), method);
                     self.pop()?;
+                }
+                OpCode::Invoke => {
+                    let method_name = match self.get_constant() {
+                        Value::String(s) => s,
+                        v => {
+                            return Err(Error::InvalidOperandError {
+                                line: self.line_of(self.ip() - 1),
+                                msg: format!("Expected a method name, found {}", v.to_type_str()),
+                            })
+                        }
+                    };
+                    let arg_count = self.read_byte();
+                    let receiver = match self.peek(usize::from(arg_count))? {
+                        Value::Instance(i) => i,
+                        v => {
+                            return Err(Error::InvalidPropertyAccessError {
+                                type_str: v.to_type_str().to_string(),
+                            });
+                        }
+                    };
+                    let method = receiver.get_method(&method_name).ok_or_else(|| {
+                        Error::UndefinedPropertyError {
+                            name: method_name.to_string(),
+                        }
+                    })?;
+                    self.handle_lox_function_call(method, arg_count)?;
                 }
             }
         }

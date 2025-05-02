@@ -17,6 +17,7 @@ pub enum OpCode {
     DefineGlobal,
     SetGlobal,
     Closure,
+    Invoke,
     Equal,
     Greater,
     Less,
@@ -65,6 +66,7 @@ impl Display for OpCode {
             OpCode::JumpIfFalse => write!(f, "OP_JUMP_IF_FALSE"),
             OpCode::Loop => write!(f, "OP_LOOP"),
             OpCode::Call => write!(f, "OP_CALL"),
+            OpCode::Invoke => write!(f, "OP_INVOKE"),
             OpCode::CloseUpValue => write!(f, "OP_CLOSE_UPVALUE"),
             OpCode::Return => write!(f, "OP_RETURN"),
             OpCode::Class => write!(f, "OP_CLASS"),
@@ -123,6 +125,7 @@ impl TryFrom<u8> for OpCode {
             value if value == Jump as u8 => Ok(Jump),
             value if value == Loop as u8 => Ok(Loop),
             value if value == Call as u8 => Ok(Call),
+            value if value == Invoke as u8 => Ok(Invoke),
             value if value == CloseUpValue as u8 => Ok(CloseUpValue),
             value if value == Closure as u8 => Ok(Closure),
             _ => Err(ConversionError { from: value }),
@@ -172,6 +175,7 @@ mod tests {
     #[case(Method)]
     #[case(Comma)]
     #[case(Closure)]
+    #[case(Invoke)]
     #[case(GetUpValue)]
     #[case(SetUpValue)]
     #[case(CloseUpValue)]

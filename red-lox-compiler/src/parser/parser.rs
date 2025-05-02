@@ -640,24 +640,30 @@ impl<'a> Parser<'a> {
         if self.env.function_type == FunctionType::Script {
             return Err(Error::ReturnFromTopLevelError { location });
         }
-        if self.check(&Token::Semicolon) {
-            self.append_write(WriteAction::WriteNoArgOpCode {
-                op_code: OpCode::Nil,
-                location: location.clone(),
-            });
-        } else {
-            if self.function_type() == FunctionType::Initializer {
+
+        if self.function_type() == FunctionType::Initializer {
+            if !self.check(&Token::Semicolon) {
                 return Err(Error::InvalidReturnValueFromInitializerError { location });
             }
-            self.expression()?;
+            // Returning `this` is handled when the method's FunctionDeclarationScope is closed.
+        } else {
+            if self.check(&Token::Semicolon) {
+                self.append_write(WriteAction::WriteNoArgOpCode {
+                    op_code: OpCode::Nil,
+                    location: location.clone(),
+                });
+            } else {
+                self.expression()?;
+            }
+            self.write_return(location);
         }
+
         self.consume(Token::Semicolon, |t| {
             format!(
                 "{} Expected ';' after the return statement, found {:?}",
                 t.location, t.token
             )
         })?;
-        self.write_return(location);
         Ok(())
     }
 

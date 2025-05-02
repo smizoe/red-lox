@@ -401,6 +401,28 @@ impl<'a> VirtualMachine<'a> {
                             });
                         }
                     };
+                    if let Some(f) = receiver.get_field(&method_name) {
+                        match f {
+                            Value::Closure(c) => {
+                                let index = self.stack_top() - usize::from(arg_count) - 1;
+                                self.stack
+                                    .borrow_mut()
+                                    .set_at(index, Value::Closure(c.clone()));
+                                self.handle_lox_function_call(c, arg_count)?;
+                                continue;
+                            }
+                            others => {
+                                return Err(Error::InvalidOperandError {
+                                    line: self.line_of(self.ip() - 1),
+                                    msg: format!(
+                                        "A value of type {} cannot be called.",
+                                        others.to_type_str()
+                                    ),
+                                })
+                            }
+                        }
+                    }
+
                     let method = receiver.get_method(&method_name).ok_or_else(|| {
                         Error::UndefinedPropertyError {
                             name: method_name.to_string(),

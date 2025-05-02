@@ -144,6 +144,7 @@ mod tests {
 
     #[rstest]
     #[case(Constant)]
+    #[case(Call)]
     #[case(Nil)]
     #[case(True)]
     #[case(False)]
